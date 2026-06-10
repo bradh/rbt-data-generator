@@ -1,14 +1,13 @@
-"""Helpers for delegating to legacy Bash scripts.
+"""Helpers for delegating to Bash leaf scripts.
 
-The Python CLI supports two execution modes:
+The architecture rule (see CONTRIBUTING.md): only the ``rbt`` CLI dispatches —
+no bash calls Python, no bash calls bash. The scripts reached through
+:func:`delegate` are leaf tasks:
 
-- **native**: use :mod:`rbt.tiles` / :mod:`rbt.importers` to run ogr2ogr and
-  tippecanoe directly. Fastest and most readable.
-- **bash-delegate**: shell out to the original scripts under
-  ``setup/`` / ``production/``. Useful during the migration period so that
-  the Python CLI is a drop-in replacement.
-
-Callers pick mode via the ``--mode`` CLI option (default: ``native``).
+- the four data importers under ``setup/data-sources/`` (download + load
+  external datasets), which remain bash by design, and
+- the deprecated tile generators under ``production/`` (``--mode bash``
+  escape hatch, kept until a real-data parity check retires them).
 """
 
 from __future__ import annotations
@@ -47,16 +46,9 @@ def delegate(
     )
 
 
-def init_database(settings: Settings, args: list[str], *, dry_run: bool = False) -> None:
-    delegate("setup/init-database.sh", args, settings, dry_run=dry_run)
-
-
 def generate_tiles_bash(settings: Settings, args: list[str], *, dry_run: bool = False) -> None:
+    """Escape hatch: run the deprecated bash tile generators (``--mode bash``)."""
     delegate("production/generate-tiles.sh", args, settings, dry_run=dry_run)
 
 
-def update_osm(settings: Settings, args: list[str], *, dry_run: bool = False) -> None:
-    delegate("production/update-osm.sh", args, settings, dry_run=dry_run)
-
-
-__all__ = ["delegate", "generate_tiles_bash", "init_database", "update_osm"]
+__all__ = ["delegate", "generate_tiles_bash"]

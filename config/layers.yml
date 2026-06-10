@@ -589,6 +589,46 @@ categories:
     inland_water: [inland_water_intermittent]
 
 # =============================================================================
+# Database schema files (run via `rbt schema`)
+# =============================================================================
+# Each key is a schema unit dispatched to psql. Paths are relative to the
+# repository root. `rbt schema run --all` executes everything; individual
+# units can be re-run after editing their SQL.
+schemas:
+  physical:
+    type: physical
+    sql: setup/data-sources/schemas/physical/physical-core.sql
+    description: Core physical views (water, glacier, built-up areas)
+  landcover:
+    type: physical
+    sql: setup/data-sources/schemas/physical/landcover.sql
+    description: Landcover and park views
+  water:
+    type: physical
+    sql: setup/data-sources/schemas/physical/water-features.sql
+    description: Water bodies, waterways, and water labels
+  contour:
+    type: physical
+    sql: setup/data-sources/schemas/physical/terrain.sql
+    description: Contours and mountain labels
+  cultural:
+    type: cultural
+    sql: setup/data-sources/schemas/cultural/cultural-core.sql
+    description: Core cultural views (aeroway, buildings, boundaries, places)
+  highway:
+    type: cultural
+    sql: setup/data-sources/schemas/cultural/transportation.sql
+    description: Roads, ferries, and ports
+  railway:
+    type: cultural
+    sql: setup/data-sources/schemas/cultural/transportation-railway.sql
+    description: Railways and stations
+  aero:
+    type: cultural
+    sql: setup/data-sources/schemas/cultural/infrastructure.sql
+    description: Utility and infrastructure views (dams, powerlines, pipelines)
+
+# =============================================================================
 # GDAL-MVT backend (EPSG:4326 only)
 # =============================================================================
 # The 4326 pipeline does NOT use tippecanoe: it drives GDAL's MVT driver

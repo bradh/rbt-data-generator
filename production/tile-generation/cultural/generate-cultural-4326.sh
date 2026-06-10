@@ -1,6 +1,13 @@
 #!/bin/bash
 
 # =============================================================================
+# DEPRECATED: the Python engine (`rbt tiles`) is the primary tile generator.
+# Kept only as the `rbt tiles --mode bash` escape hatch until a real-data
+# parity check (see docs/parity-runbook.md) confirms the native output.
+# Do not add new layers here — extend config/layers.yml instead.
+# =============================================================================
+
+# =============================================================================
 # Optimized Cultural Vector Tiles Generation Script for EPSG:4326
 # =============================================================================
 # 

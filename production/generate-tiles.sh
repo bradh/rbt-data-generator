@@ -2,8 +2,14 @@
 set -euo pipefail
 
 # =============================================================================
-# RBT Vector Tiles Generation Script
+# RBT Vector Tiles Generation Script — DEPRECATED
 # =============================================================================
+# DEPRECATED: the Python engine (`rbt tiles`) is the primary tile generator.
+# This script and the generators under production/tile-generation/ are kept
+# only as the `rbt tiles --mode bash` escape hatch until a real-data parity
+# check (see docs/parity-runbook.md) confirms the native output, after which
+# they will be removed. Do not add new layers here — extend config/layers.yml.
+#
 # This script generates vector tiles from the prepared RBT database.
 # It supports multiple projections and selective layer generation.
 # =============================================================================
@@ -606,7 +612,7 @@ main() {
     # Validate environment
     if ! psql "${RBT_DB_CONN}" -c "SELECT 1" >/dev/null 2>&1; then
         log "ERROR" "Cannot connect to RBT database. Please ensure database is initialized."
-        log "ERROR" "Run: ./setup/init-database.sh"
+        log "ERROR" "Run: rbt setup --all"
         exit 1
     fi
     

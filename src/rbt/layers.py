@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -58,6 +58,16 @@ class Layer:
 
 
 @dataclass(frozen=True, slots=True)
+class SchemaFile:
+    """One database schema unit (a PL/pgSQL file dispatched via psql)."""
+
+    key: str
+    layer_type: str  # 'cultural' or 'physical'
+    sql: str  # path relative to the repository root
+    description: str = ""
+
+
+@dataclass(frozen=True, slots=True)
 class MvtSourceTable:
     """One source table feeding the GDAL-MVT (EPSG:4326) backend.
 
@@ -108,6 +118,10 @@ class LayerRegistry:
     layers: dict[str, Layer]
     categories: dict[str, dict[str, tuple[str, ...]]]
     gdal_mvt: MvtConfig | None = None
+    schemas: dict[str, SchemaFile] = field(default_factory=dict)
+
+    def schemas_for_type(self, layer_type: str) -> list[SchemaFile]:
+        return [s for s in self.schemas.values() if s.layer_type == layer_type]
 
     def layer(self, key: str) -> Layer:
         try:
@@ -210,6 +224,15 @@ def load_registry(path: Path | None = None) -> LayerRegistry:
         layers=layers,
         categories=categories,
         gdal_mvt=_build_mvt_config(raw.get("gdal_mvt")),
+        schemas={
+            str(key): SchemaFile(
+                key=str(key),
+                layer_type=str(spec.get("type", "")),
+                sql=str(spec["sql"]),
+                description=str(spec.get("description", "")),
+            )
+            for key, spec in (raw.get("schemas", {}) or {}).items()
+        },
     )
 
 
@@ -252,6 +275,7 @@ __all__ = [
     "MvtSourceTable",
     "OgrOptions",
     "Projection",
+    "SchemaFile",
     "TippecanoeOptions",
     "load_registry",
 ]

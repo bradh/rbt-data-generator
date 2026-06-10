@@ -139,7 +139,7 @@ RUN find ./setup ./production ./tools ./scripts -name "*.sh" -exec chmod +x {} \
     && mkdir -p output/logs output/tiles cache
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD rbt health || ./tools/health-check.sh || exit 1
+    CMD rbt health || exit 1
 
 # Default command runs continuous tile generation via the Python CLI. Compose
 # overrides this for setup (`rbt setup --all`) and OSM (`rbt osm run`).

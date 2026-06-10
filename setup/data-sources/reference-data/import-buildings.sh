@@ -2,6 +2,18 @@
 set -euo pipefail
 
 # =============================================================================
+# CONTRACT — bash leaf script, invoked via `rbt import buildings` / `rbt setup`
+# =============================================================================
+# Inputs:  Overture Maps buildings from S3 (aws CLI); env DATABASE_*/PG_*
+#          (provided by the rbt CLI).
+# Outputs: overture schema tables in the target database; logs under
+#          $SHARED_LOG_DIR.
+# Exit:    0 on success, non-zero on any failed stage. Do not invoke directly
+#          — only through the rbt CLI, which resolves and exports the
+#          environment this script expects.
+# =============================================================================
+
+# =============================================================================
 # OVERTURE BUILDINGS DATA INGESTION SCRIPT
 # =============================================================================
 #

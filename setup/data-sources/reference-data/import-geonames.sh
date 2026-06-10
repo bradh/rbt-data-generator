@@ -2,6 +2,18 @@
 set -euo pipefail
 
 # =============================================================================
+# CONTRACT — bash leaf script, invoked via `rbt import geonames` / `rbt setup`
+# =============================================================================
+# Inputs:  NGA GNS (geonames.nga.mil) zip downloads; env DATABASE_*/PG_*
+#          (provided by the rbt CLI); WGET_PARALLEL_JOBS from config/rbt.conf.
+# Outputs: geonames schema tables in the target database; logs under
+#          $SHARED_LOG_DIR.
+# Exit:    0 on success, non-zero on any failed stage. Do not invoke directly
+#          — only through the rbt CLI, which resolves and exports the
+#          environment this script expects.
+# =============================================================================
+
+# =============================================================================
 # GEONAMES DATA INGESTION SCRIPT - EXTRACTED FROM MAIN DATABASE SETUP
 # =============================================================================
 #

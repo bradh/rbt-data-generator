@@ -2,6 +2,18 @@
 set -euo pipefail
 
 # =============================================================================
+# CONTRACT — bash leaf script, invoked via `rbt import reference` / `rbt setup`
+# =============================================================================
+# Inputs:  FieldMaps, Natural Earth, OurAirports, OSM water/coastline, and
+#          MIRTA downloads; env DATABASE_*/PG_* (provided by the rbt CLI).
+# Outputs: fieldmap/naturalearth/ourairports/mirta (and related) schemas in
+#          the target database; logs under $SHARED_LOG_DIR.
+# Exit:    0 on success, non-zero on any failed stage. Do not invoke directly
+#          — only through the rbt CLI, which resolves and exports the
+#          environment this script expects.
+# =============================================================================
+
+# =============================================================================
 # OPTIMIZED FRESH DATABASE SETUP SCRIPT FOR CI/CD PIPELINES - NO GEONAMES
 # =============================================================================
 #

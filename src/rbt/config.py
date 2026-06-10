@@ -59,6 +59,23 @@ class Settings:
     shared_log_dir: Path = Path("./output/logs")
     shared_temp_dir: Path = Path("./output/temp")
 
+    # Database provisioning + validation expectations
+    database_extensions: tuple[str, ...] = ("postgis", "postgis_raster", "hstore", "pg_trgm")
+    database_schemas: tuple[str, ...] = (
+        "fieldmap",
+        "mirta",
+        "naturalearth",
+        "ourairports",
+        "rbt",
+        "geonames",
+        "overture",
+    )
+    disk_space_required_gb: int = 100
+    memory_required_gb: int = 16
+
+    # OSM continuous updates
+    osm_config_file: Path = Path("setup/data-sources/osm/imposm-config.json")
+
     def psql_conn_string(self, dbname: str | None = None) -> str:
         db = dbname or self.database_name
         parts = [
@@ -249,6 +266,23 @@ def load_settings(overrides: dict[str, str] | None = None) -> Settings:
         config_file=conf_path,
         shared_log_dir=Path(resolve("SHARED_LOG_DIR", default=str(root / "output" / "logs"))),
         shared_temp_dir=Path(resolve("SHARED_TEMP_DIR", default=str(root / "output" / "temp"))),
+        database_extensions=tuple(
+            resolve("DATABASE_EXTENSIONS", default="postgis postgis_raster hstore pg_trgm").split()
+        ),
+        database_schemas=tuple(
+            resolve(
+                "DATABASE_SCHEMAS",
+                default="fieldmap mirta naturalearth ourairports rbt geonames overture",
+            ).split()
+        ),
+        disk_space_required_gb=_coerce_int(resolve("DISK_SPACE_REQUIRED_GB"), 100),
+        memory_required_gb=_coerce_int(resolve("MEMORY_REQUIRED_GB"), 16),
+        osm_config_file=Path(
+            resolve(
+                "OSM_CONFIG_FILE",
+                default=str(root / "setup" / "data-sources" / "osm" / "imposm-config.json"),
+            )
+        ),
     )
 
     return settings

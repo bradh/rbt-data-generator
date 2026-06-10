@@ -22,7 +22,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from . import __version__, bash
+from . import __version__, bash, checks, schema, setup_db
 from .config import Settings, load_settings
 from .importers import buildings as buildings_importer
 from .importers import geonames as geonames_importer
@@ -48,12 +48,14 @@ osm_app = typer.Typer(help="Continuous OSM updates and diff management.")
 setup_app = typer.Typer(help="Database initialization helpers.")
 importers_app = typer.Typer(help="Run individual data importers (OSM, GeoNames, Overture, etc.).")
 layers_app = typer.Typer(help="Inspect the declarative layer registry.")
+schema_app = typer.Typer(help="Run database schema SQL (rbt.* views).")
 
 app.add_typer(tiles_app, name="tiles")
 app.add_typer(osm_app, name="osm")
 app.add_typer(setup_app, name="setup")
 app.add_typer(importers_app, name="import")
 app.add_typer(layers_app, name="layers")
+app.add_typer(schema_app, name="schema")
 
 
 class LayerType(str, Enum):
@@ -365,18 +367,20 @@ def osm_run(
     ctx: typer.Context,
     dry_run: bool = typer.Option(False, "--dry-run"),
 ) -> None:
-    """Start the continuous imposm run loop."""
-    osm_importer.run_updates(_settings(ctx), ["run"], dry_run=dry_run)
+    """Start the continuous imposm run loop (blocks until stopped)."""
+    osm_importer.run_updates(_settings(ctx), dry_run=dry_run)
 
 
 @osm_app.command("status")
 def osm_status(ctx: typer.Context) -> None:
-    osm_importer.run_updates(_settings(ctx), ["status"])
+    """Show whether updates are running and the last applied OSM change."""
+    raise typer.Exit(osm_importer.update_status(_settings(ctx)))
 
 
 @osm_app.command("stop")
 def osm_stop(ctx: typer.Context) -> None:
-    osm_importer.run_updates(_settings(ctx), ["stop"])
+    """Stop a running `rbt osm run` supervisor."""
+    raise typer.Exit(osm_importer.stop_updates(_settings(ctx)))
 
 
 @osm_app.command("import")
@@ -405,23 +409,31 @@ def setup_entry(
     process_schemas: bool = typer.Option(False, "--process-schemas"),
     dry_run: bool = typer.Option(False, "--dry-run"),
 ) -> None:
-    """Run the database initialization orchestrator (delegates to bash)."""
+    """One-time database initialization (bootstrap, imports, schemas)."""
     if ctx.invoked_subcommand is not None:
         return
 
-    flags = {
-        "--all": all_,
-        "--setup-database": setup_database,
-        "--import-osm-data": import_osm_data,
-        "--import-reference-data": import_reference_data,
-        "--import-geonames": import_geonames,
-        "--import-buildings": import_buildings,
-        "--process-schemas": process_schemas,
-    }
-    args = [flag for flag, enabled in flags.items() if enabled]
-    if not args:
-        args = ["--all"]
-    bash.init_database(_settings(ctx), args, dry_run=dry_run)
+    if all_ or not any(
+        (
+            setup_database,
+            import_osm_data,
+            import_reference_data,
+            import_geonames,
+            import_buildings,
+            process_schemas,
+        )
+    ):
+        steps = setup_db.SetupSteps.all()
+    else:
+        steps = setup_db.SetupSteps(
+            bootstrap=setup_database,
+            import_osm=import_osm_data,
+            import_reference=import_reference_data,
+            import_geonames=import_geonames,
+            import_buildings=import_buildings,
+            process_schemas=process_schemas,
+        )
+    setup_db.run_setup(_settings(ctx), load_registry(), steps, dry_run=dry_run)
 
 
 # ---------------------------------------------------------------------------
@@ -514,26 +526,71 @@ def layers_show(layer_key: str = typer.Argument(...)) -> None:
 
 
 # ---------------------------------------------------------------------------
-# rbt validate / rbt smoke
+# rbt schema
+# ---------------------------------------------------------------------------
+
+
+@schema_app.command("list")
+def schema_list() -> None:
+    """List the registered schema SQL units."""
+    registry = load_registry()
+    table = Table(title="RBT Schema Units")
+    table.add_column("Key", style="cyan")
+    table.add_column("Type", style="green")
+    table.add_column("SQL file")
+    table.add_column("Description")
+    for unit in registry.schemas.values():
+        table.add_row(unit.key, unit.layer_type, unit.sql, unit.description)
+    console.print(table)
+
+
+@schema_app.command("run")
+def schema_run(
+    ctx: typer.Context,
+    keys: list[str] = typer.Argument(None, help="Schema keys (see `rbt schema list`)."),
+    layer_type: LayerType | None = typer.Option(
+        None, "--type", help="Run every schema of this layer type."
+    ),
+    all_: bool = typer.Option(False, "--all", help="Run every registered schema."),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    """Execute schema SQL files via psql (creates/refreshes the rbt.* views)."""
+    selected_keys = list(keys or [])
+    selected_type = (
+        layer_type.value if layer_type is not None and layer_type is not LayerType.all else None
+    )
+    if all_:
+        selected_keys, selected_type = [], None
+    schema.run_schemas(
+        _settings(ctx),
+        load_registry(),
+        keys=selected_keys or None,
+        layer_type=selected_type,
+        dry_run=dry_run,
+    )
+
+
+# ---------------------------------------------------------------------------
+# rbt validate / rbt smoke / rbt health
 # ---------------------------------------------------------------------------
 
 
 @app.command("validate")
 def validate(ctx: typer.Context) -> None:
-    """Run tools/validate-environment.sh."""
-    bash.delegate("tools/validate-environment.sh", [], _settings(ctx))
+    """Pre-flight validation: config, tools, database, disk, and memory."""
+    raise typer.Exit(checks.validate(_settings(ctx)))
 
 
 @app.command("smoke")
 def smoke(ctx: typer.Context) -> None:
-    """Run tools/smoke-test.sh."""
-    bash.delegate("tools/smoke-test.sh", [], _settings(ctx))
+    """End-to-end sanity check (validate, bootstrap, schemas, tile dry-runs)."""
+    raise typer.Exit(checks.smoke(_settings(ctx)))
 
 
 @app.command("health")
 def health(ctx: typer.Context) -> None:
-    """Run tools/health-check.sh."""
-    bash.delegate("tools/health-check.sh", [], _settings(ctx))
+    """Fast liveness probe used by the Docker HEALTHCHECK."""
+    raise typer.Exit(checks.health(_settings(ctx)))
 
 
 def main() -> None:  # pragma: no cover - CLI entry

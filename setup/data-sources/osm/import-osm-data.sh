@@ -2,6 +2,19 @@
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
 # =============================================================================
+# CONTRACT — bash leaf script, invoked via `rbt import osm` / `rbt setup`
+# =============================================================================
+# Inputs:  OSM planet PBF or regional extract (downloaded via aria2c), env
+#          DATABASE_*/PG_* (provided by the rbt CLI), OSM_* settings from
+#          config/rbt.conf (data/cache/diff dirs, imposm mapping + config).
+# Outputs: imposm-managed OSM tables in the target database; logs under
+#          $SHARED_LOG_DIR.
+# Exit:    0 on success, non-zero on any failed stage (callers treat this as
+#          fatal). Do not invoke directly — only through the rbt CLI, which
+#          resolves and exports the environment this script expects.
+# =============================================================================
+
+# =============================================================================
 # OSM Data Import Script - Optimized for Containerized Environments
 # =============================================================================
 

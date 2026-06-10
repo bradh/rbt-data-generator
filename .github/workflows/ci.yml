@@ -67,6 +67,8 @@ jobs:
           ~/.local/bin/uv sync --extra dev
       - name: Ruff
         run: ~/.local/bin/uv run ruff check src tests
+      - name: Mypy
+        run: ~/.local/bin/uv run mypy src
       - name: Pytest
         run: ~/.local/bin/uv run pytest -q
 
@@ -104,8 +106,16 @@ jobs:
             | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
           sudo apt-get install -y postgresql-client-17 gdal-bin sqlite3
-      - name: Dry-run validation
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Set up Python CLI
+        run: ~/.local/bin/uv sync
+      - name: Dry-run validation (rbt CLI)
         run: |
-          # The validator expects all tools present; use the dry-run smoke portion only.
+          ~/.local/bin/uv run rbt --no-log-file tiles --layer-type physical --projection 3857 --water --dry-run
+          ~/.local/bin/uv run rbt --no-log-file tiles --layer-type cultural --projection 4326 --building --dry-run
+          ~/.local/bin/uv run rbt --no-log-file schema run --all --dry-run
+      - name: Dry-run validation (deprecated bash path)
+        run: |
           ./production/generate-tiles.sh --layer-type physical --projection 3857 --water --dry-run
           ./production/generate-tiles.sh --layer-type cultural --projection 4326 --building --dry-run
