@@ -1,6 +1,11 @@
 # scripts/lib/
 
-Shared Bash helpers sourced by every script in this repository. Sourcing these files is the way scripts should acquire logging, configuration, and database connection helpers — do not reimplement them locally.
+Shared Bash helpers sourced by every Bash script in this repository — the four
+data importer leaf scripts under `setup/data-sources/` (invoked via
+`rbt import` / `rbt setup`) and the deprecated tile generators under
+`production/` (reachable only via `rbt tiles --mode bash`). Sourcing these
+files is the way scripts should acquire logging, configuration, and database
+connection helpers — do not reimplement them locally.
 
 ## Files
 
@@ -35,3 +40,4 @@ After `rbt_config_load` returns:
 - Scripts must not mutate these helpers — source-and-use only.
 - All new Bash scripts must source both helpers (enforced lightly via `shellcheck` in CI).
 - Python code should not call into these helpers; it has its own equivalent at `src/rbt/config.py` and `src/rbt/logging.py`.
+- Bash scripts are leaf tasks: only the `rbt` CLI dispatches them (no bash calls bash, no bash calls Python — see `CONTRIBUTING.md`). When the CLI invokes a script it exports the resolved `DATABASE_*`/`PG*` environment, so `rbt_config_load` sees consistent values either way.

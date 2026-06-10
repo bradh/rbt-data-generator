@@ -1,22 +1,42 @@
 # tools/
 
-Ad-hoc utilities and operational aids that run outside the main setup/production pipelines.
+Ad-hoc utilities that run outside the main setup/production pipelines.
 
 | Script | Purpose |
 |---|---|
-| [validate-environment.sh](validate-environment.sh) | Pre-flight check of env vars, CLI tools, DB connectivity, disk, memory, and project layout. Exits non-zero on any error. |
-| [smoke-test.sh](smoke-test.sh) | Fast end-to-end sanity check: environment → extension creation → schema dry run → tile-generation dry run → DB connectivity. |
-| [health-check.sh](health-check.sh) | Docker healthcheck script. Returns exit 0 on successful DB round-trip. Honors `DATABASE_HOST`/`DATABASE_PORT`. |
-| [overture_building_processing.sh](overture_building_processing.sh) | Downloads Overture buildings from S3 and ingests into PostgreSQL. |
-| [duckdb-building-export.sql](duckdb-building-export.sql) | DuckDB alternative for Overture building export, avoiding ogr2ogr for the first pass. |
+| [overture_building_processing.sh](overture_building_processing.sh) | Processes Overture building data with DuckDB and exports area-filtered building tables to FlatGeoBuf in multiple projections and zoom levels. |
+| [duckdb-building-export.sql](duckdb-building-export.sql) | The DuckDB SQL driven by the script above — an alternative Overture building export path that avoids ogr2ogr for the first pass. |
 
-## Running
+## Where did the check scripts go?
 
-All scripts honor `config/rbt.conf` plus legacy `PG_*` env vars:
+The former `validate-environment.sh`, `health-check.sh`, and `smoke-test.sh`
+were replaced by native Python commands in the `rbt` CLI
+(`src/rbt/checks.py`):
+
+| Old script | Replacement |
+|---|---|
+| `validate-environment.sh` | `rbt validate` — pre-flight check of config, CLI tools, DB connectivity, disk, memory, and project layout. |
+| `smoke-test.sh` | `rbt smoke` — end-to-end sanity check: validate → bootstrap → schema run → tile dry-runs → DB round-trip. |
+| `health-check.sh` | `rbt health` — fast liveness probe; the `HEALTHCHECK` in `Dockerfile.production` runs `rbt health`. |
 
 ```bash
-./tools/validate-environment.sh
-./tools/smoke-test.sh
+rbt validate
+rbt smoke
+rbt health
+
+# Inside a running container
+docker compose exec rbt-tiles rbt health
 ```
 
-The health check is also exposed via the `HEALTHCHECK` directive in `Dockerfile.production` and via `docker compose exec rbt-tiles ./tools/health-check.sh`.
+## Running the Overture utilities
+
+```bash
+# Requires duckdb on PATH; see the script header for tunables
+OUTPUT_DIR=/data ./tools/overture_building_processing.sh
+```
+
+Key environment variables: `OUTPUT_DIR` (default `/data`),
+`DUCKDB_MEMORY_LIMIT` (default `200GB`), `DUCKDB_MAX_TEMP_SIZE`
+(default `2900GB`), `CLEANUP_TEMP_FILES` (default `true`). See
+[docs/duckdb-buildings.md](../docs/duckdb-buildings.md) for the full
+workflow.

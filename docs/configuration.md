@@ -5,7 +5,7 @@ RBT Vector Tiles uses a centralized configuration file (`config/rbt.conf`) as th
 ## Resolution order (highest priority first)
 
 1. Environment variables exported at the shell (or passed via `docker-compose`).
-2. Values in [`config/rbt.conf`](../config/rbt.conf).
+2. Values in [`config/rbt.conf`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/rbt.conf).
 3. Per-script defaults (usually defensive fallbacks in `scripts/lib/config.sh`).
 
 ## Sections
