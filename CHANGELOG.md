@@ -4,7 +4,51 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-06-09
+
+Initial public release: the `rbt` CLI becomes the single orchestrator over a
+hybrid Python/bash pipeline, with a native EPSG:4326 backend, an expanded test
+suite, a full documentation site, and open-source hygiene files.
+
 ### Added
+- Native EPSG:4326 tile backend (`src/rbt/tiles/gdal_mvt.py`) driving GDAL's
+  MVT driver from a new `gdal_mvt:` section in `config/layers.yml` — the 4326
+  pipeline never used tippecanoe, and the Python engine previously produced
+  wrong output for it.
+- `rbt schema` command dispatching the eight PL/pgSQL schema files via psql
+  (`ON_ERROR_STOP=1`), replacing both `process-*-schemas.sh` dispatchers.
+- Native `rbt setup` (database bootstrap via psycopg + import/schema
+  sequencing), `rbt osm run|status|stop` (supervised imposm with proper signal
+  handling and a pidfile), and `rbt health|validate|smoke` (`src/rbt/checks.py`).
+- `--force` flag on `rbt tiles` to re-export cached FlatGeoBuf files after a
+  database refresh.
+- Auto-generated CLI reference (`docs/cli.md` via mkdocs-click) and new
+  documentation: project tour, installation, operations guide, database schema
+  reference with lineage diagrams, data-source licensing, and a tile-output
+  parity runbook.
+- `ATTRIBUTION.md`, `CODE_OF_CONDUCT.md`, issue templates, and a PR template.
+- Test suite covering process execution, config resolution, exporters, the
+  tippecanoe and GDAL-MVT backends, the engine, schema/setup/OSM/check
+  commands, plus a command-parity test against the deprecated bash generators
+  and a CI integration job that generates real tiles against PostGIS.
+
+### Changed
+- Settings loading no longer mutates `os.environ`; child processes receive an
+  explicit environment (`Settings.subprocess_env()`).
+- Docker `HEALTHCHECK` now uses `rbt health` exclusively.
+- The four bash tile generators and `production/generate-tiles.sh` are
+  deprecated behind `rbt tiles --mode bash` pending the parity runbook.
+- Internal infrastructure references (logo, hostnames, IPs) scrubbed for
+  public release.
+
+### Removed
+- `setup/init-database.sh`, `production/update-osm.sh`,
+  `tools/{validate-environment,health-check,smoke-test}.sh`, and both
+  `process-*-schemas.sh` dispatchers — all replaced by `rbt` commands.
+
+### Pre-release groundwork
+
+#### Added
 - Shared Bash helper `scripts/lib/config.sh` resolving `DATABASE_*` / legacy `PG_*` variables exactly once.
 - Declarative layer registry at `config/layers.yml` consumed by both the Bash and Python generators.
 - Python CLI package `rbt` under `src/rbt/` (typer-based) exposing `rbt tiles`, `rbt osm`, `rbt setup`, and `rbt generate` commands.
@@ -14,7 +58,7 @@ All notable changes to this project are documented in this file. The format is b
 - Configuration templates shipped under `config/`: `postgresql.conf`, `tile-server.json`, `prometheus.yml`.
 - Documentation split: `docs/configuration.md`, `docs/troubleshooting.md`, `docs/performance.md`.
 
-### Changed
+#### Changed
 - Pinned PostgreSQL 17 + PostGIS 3.5 across `docker-compose.yml` and both Dockerfiles (previously 15/14/17 mix).
 - Rewrote `Dockerfile.production` as multi-stage (shared tippecanoe + imposm builder stages) and removed `Dockerfile.setup` in favor of a single image with a configurable entrypoint.
 - `tippecanoe` now built from `felt/tippecanoe` (maintained fork) pinned to a release tag with checksum verification.
@@ -25,11 +69,14 @@ All notable changes to this project are documented in this file. The format is b
 - `TILE_TEMP_DIR` default reconciled across `config/rbt.conf` and scripts (`/tmp/tiles`).
 - Logging unified: all shell scripts now source `scripts/lib/logging.sh` instead of reimplementing ANSI color codes.
 
-### Removed
+#### Removed
 - Deprecated `version: '3.8'` line from `docker-compose.yml`.
 - Duplicated per-script logging/config prelude blocks (~400 LOC of bash).
 - `Dockerfile.setup` (merged into a single multi-stage Dockerfile).
 
-### Fixed
+#### Fixed
 - `docker-compose.yml` no longer mounts nonexistent files — templates are shipped under `config/`.
 - README and compose now agree on PostgreSQL version.
+
+[Unreleased]: https://github.com/MJJ203/rbt-data-generator/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/MJJ203/rbt-data-generator/releases/tag/v0.1.0
