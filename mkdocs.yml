@@ -1,11 +1,11 @@
 site_name: RBT Vector Tiles Documentation
 site_description: Comprehensive geospatial vector tile generation system for multi-projection mapping
 site_author: Michael Jones
-site_url: https://rbt.pages.dso.xc.nga.mil/etl/vectortiles
+site_url: https://mjj203.github.io/rbt-data-generator/
 
 # Repository
-repo_name: vectortiles
-repo_url: https://gitlab.dso.xc.nga.mil/RBT/etl/vectortiles
+repo_name: MJJ203/rbt-data-generator
+repo_url: https://github.com/MJJ203/rbt-data-generator
 edit_uri: edit/main/docs/
 
 
@@ -121,6 +121,10 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Architecture: architecture.md
+  - Reference:
+    - Configuration: configuration.md
+    - Performance & Sizing: performance.md
+    - Troubleshooting: troubleshooting.md
   - Database Setup:
     - Database Initialization: database-initialization.md
     - OSM Import Pipeline: osm-import.md

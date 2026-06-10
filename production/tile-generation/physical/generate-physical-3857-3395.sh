@@ -68,7 +68,7 @@ ADD_BTIS=false
 BTP_SCHEMA_VERSION="1.0.0"
 
 # Tippecanoe temp directory (using config with fallback)
-TEMP_DIR="${TILE_TEMP_DIR:-/mnt/data}"
+TEMP_DIR="${TILE_TEMP_DIR:-/tmp/tiles}"
 
 # =============================================================================
 # Projection Configuration
@@ -1063,28 +1063,20 @@ add_btis_metadata() {
         return 1
     fi
     
-    # Add projection-specific metadata
-    log "Adding CRS metadata (EPSG:${PROJECTION_CODE})..."
-    sqlite3 "$target_file" "INSERT OR REPLACE INTO metadata(name,value) VALUES('crs','EPSG:${PROJECTION_CODE}');" && \
-    
-    log "Adding tile origin metadata..."
-    sqlite3 "$target_file" "INSERT OR REPLACE INTO metadata(name,value) VALUES('tile_origin_upper_left_x','${TILE_ORIGIN_X}');" && \
-    sqlite3 "$target_file" "INSERT OR REPLACE INTO metadata(name,value) VALUES('tile_origin_upper_left_y','${TILE_ORIGIN_Y}');" && \
-    
-    log "Adding tile dimension metadata..."
-    sqlite3 "$target_file" "INSERT OR REPLACE INTO metadata(name,value) VALUES('tile_dimension_zoom_0','${TILE_DIMENSION}');" && \
-    
-    log "Adding BTP schema version ($BTP_SCHEMA_VERSION)..."
-    sqlite3 "$target_file" "INSERT OR REPLACE INTO metadata(name,value) VALUES('btp_schema_version','$BTP_SCHEMA_VERSION');" && \
-    
-    log "Adding changelog URL..."
-    sqlite3 "$target_file" "INSERT OR REPLACE INTO metadata(name,value) VALUES('changelog_url','');" && \
-    
-    log "Cleaning up tippecanoe metadata..."
-    sqlite3 "$target_file" "DELETE FROM metadata WHERE name = 'generator_options';" && \
-    sqlite3 "$target_file" "DELETE FROM metadata WHERE name = 'strategies';"
-    
-    if [[ $? -eq 0 ]]; then
+    log "Applying BTIS metadata (CRS EPSG:${PROJECTION_CODE}, BTP ${BTP_SCHEMA_VERSION}) in a single transaction..."
+    if sqlite3 "$target_file" <<SQL
+BEGIN TRANSACTION;
+INSERT OR REPLACE INTO metadata(name,value) VALUES('crs','EPSG:${PROJECTION_CODE}');
+INSERT OR REPLACE INTO metadata(name,value) VALUES('tile_origin_upper_left_x','${TILE_ORIGIN_X}');
+INSERT OR REPLACE INTO metadata(name,value) VALUES('tile_origin_upper_left_y','${TILE_ORIGIN_Y}');
+INSERT OR REPLACE INTO metadata(name,value) VALUES('tile_dimension_zoom_0','${TILE_DIMENSION}');
+INSERT OR REPLACE INTO metadata(name,value) VALUES('btp_schema_version','${BTP_SCHEMA_VERSION}');
+INSERT OR REPLACE INTO metadata(name,value) VALUES('changelog_url','');
+DELETE FROM metadata WHERE name = 'generator_options';
+DELETE FROM metadata WHERE name = 'strategies';
+COMMIT;
+SQL
+    then
         log "Successfully added BTIS metadata to $(basename "$target_file")"
         
         # Display metadata summary
@@ -1092,7 +1084,7 @@ add_btis_metadata() {
         log "  - CRS: EPSG:${PROJECTION_CODE}"
         log "  - Tile origin: (${TILE_ORIGIN_X}, ${TILE_ORIGIN_Y})"
         log "  - Tile dimension (zoom 0): ${TILE_DIMENSION}"
-        log "  - BTP schema version: 1.0.0"
+        log "  - BTP schema version: ${BTP_SCHEMA_VERSION}"
         log "  - Removed tippecanoe generator metadata"
     else
         log "ERROR: Failed to add BTIS metadata. Check SQLite operations."

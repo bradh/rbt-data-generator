@@ -1,0 +1,610 @@
+# =============================================================================
+# RBT Vector Tiles — Layer Registry
+# =============================================================================
+# Declarative definition of every tile layer the pipeline produces. The Python
+# CLI (`src/rbt`) consumes this file to dispatch tippecanoe / ogr2ogr commands;
+# the legacy Bash generators under `production/tile-generation/` still contain
+# the ground truth for inline tippecanoe JSON filters and are kept for parity
+# checks. When adding a new layer, prefer extending this file over editing bash.
+#
+# Schema (per layer):
+#   source_table:        Postgres table/view used as ogr2ogr input (required).
+#   layer_name:          Tippecanoe -l / -n name. Defaults to layer key.
+#   min_zoom / max_zoom: -Z / -z.
+#   projections:         Subset of [3857, 3395, 4326] — defaults to all three.
+#   category:            Grouping for --transportation / --building / etc.
+#   ogr2ogr:
+#     spatial_index:     true  → default; false emits `-lco SPATIAL_INDEX=NO`.
+#     skipfailures:      true by default.
+#   tippecanoe:
+#     options:           Raw CLI flags (e.g. [--drop-smallest-as-needed]).
+#     int_attrs:         Columns coerced to integer.
+#     float_attrs:       Columns coerced to float.
+#     bool_attrs:        Columns coerced to boolean.
+#     string_attrs:      Columns forced to string.
+#     filter_ref:        Key into the `filters:` section below.
+#   btis:                Whether this layer should receive BTIS metadata
+#                        when produced in isolation. Consolidated files always
+#                        receive BTIS when --add-btis is requested.
+# =============================================================================
+
+meta:
+  btp_schema_version: "1.0.0"
+  defaults:
+    projection_list: [3857, 3395, 4326]
+    min_zoom: 0
+    max_zoom: 13
+    tippecanoe_options:
+      - --no-progress-indicator
+      - --single-precision
+    ogr2ogr:
+      spatial_index: true
+      skipfailures: true
+
+filters:
+  # Filter JSON strings live here verbatim. The Bash generators still inline
+  # copies of these; treat this file as the source of truth going forward.
+  building: |
+    {"*":["any",
+      ["all",[">=","$zoom",10],[">","area",5000]],
+      ["all",[">=","$zoom",11],[">","area",2500]],
+      ["all",[">=","$zoom",12],[">","area",1500]],
+      ["all",[">=","$zoom",13]]
+    ]}
+  railway: |
+    {"*":["any",
+      ["all",[">=","$zoom",6],["!=","service","yard"]],
+      ["all",[">=","$zoom",13]]
+    ]}
+  hydrographic: |
+    {"*":["any",
+      ["all",[">=","$zoom",1],["in","class","Ocean","Sea"]],
+      ["all",[">=","$zoom",3],["in","class","Ocean","Sea","Gulf"]],
+      ["all",[">=","$zoom",4],[">=","area",12417500000]],
+      ["all",[">=","$zoom",5],[">=","area",9468380000]],
+      ["all",[">=","$zoom",6],[">=","area",5608210000]],
+      ["all",[">=","$zoom",7],[">=","area",1406880000]],
+      ["all",[">=","$zoom",8],[">=","area",24216600]],
+      ["all",[">=","$zoom",9],[">=","area",11804400]],
+      ["all",[">=","$zoom",10],[">","area",0]],
+      ["all",[">=","$zoom",12]]
+    ]}
+  populated_places: |
+    {"*":["any",
+      ["all",[">=","$zoom",3],["<","rank",8]],
+      ["all",[">=","$zoom",7],["<","rank",11]],
+      ["all",[">=","$zoom",9],["<","rank",12]],
+      ["all",[">=","$zoom",12]]
+    ]}
+  utility: |
+    {"*":["any",
+      ["all",[">=","$zoom",6],["!in","subclass","utility_pole","pole","tower"]],
+      ["all",[">=","$zoom",12],["!in","subclass","utility_pole","pole"]],
+      ["all",[">=","$zoom",13]]
+    ]}
+
+cultural:
+  aeroway_surface:
+    category: aeroway
+    source_table: rbt.aeroway_surface
+    min_zoom: 8
+    tippecanoe:
+      options: [--extra-detail=13, --no-simplification-of-shared-nodes,
+                --drop-smallest-as-needed, --simplify-only-low-zooms,
+                --no-tiny-polygon-reduction-at-maximum-zoom]
+      float_attrs: [area]
+      int_attrs: [osm_id, osm_runway_id]
+
+  airports:
+    category: aeroway
+    source_table: rbt.airports
+    min_zoom: 5
+    tippecanoe:
+      options: [-r, "1", --drop-densest-as-needed]
+      int_attrs: [airport_id, runway_length_ft, osm_runway_length_ft,
+                  runway_width_ft, runway_lighted, runway_closed,
+                  elevation_ft, osm_id_aerodrome, osm_id_runway,
+                  category, rank]
+      float_attrs: [runway_le_heading, runway_he_heading, osm_aerodrome_area]
+
+  heliports:
+    category: aeroway
+    source_table: rbt.heliports
+    min_zoom: 5
+    tippecanoe:
+      options: [-r, "1", --drop-densest-as-needed]
+      int_attrs: [rank, elevation_ft]
+
+  runway_curve:
+    category: aeroway
+    source_table: rbt.runway_curve
+    layer_name: runway_curve
+    mbtiles_name: aeroway_curve
+    min_zoom: 8
+    tippecanoe:
+      options: [--extra-detail=13, --drop-smallest-as-needed,
+                --simplify-only-low-zooms, --no-simplification-of-shared-nodes]
+      int_attrs: [aerodrome_id, length, osm_id]
+
+  adm0_labels:
+    category: boundary
+    source_table: rbt.adm0_labels
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  adm0_lines:
+    category: boundary
+    source_table: rbt.adm0_lines
+    tippecanoe:
+      options: [--drop-smallest-as-needed, --simplify-only-low-zooms,
+                --no-simplification-of-shared-nodes, --extra-detail=13]
+
+  adm1_labels:
+    category: boundary
+    source_table: rbt.adm1_labels
+    min_zoom: 3
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+      float_attrs: [area]
+
+  adm1_lines:
+    category: boundary
+    source_table: rbt.adm1_lines
+    min_zoom: 3
+    tippecanoe:
+      options: [--drop-smallest-as-needed, --simplify-only-low-zooms,
+                --no-simplification-of-shared-nodes, --extra-detail=13]
+
+  adm2_labels:
+    category: boundary
+    source_table: rbt.adm2_labels
+    min_zoom: 6
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  adm2_lines:
+    category: boundary
+    source_table: rbt.adm2_lines
+    min_zoom: 6
+    tippecanoe:
+      options: [--drop-smallest-as-needed, --simplify-only-low-zooms,
+                --no-simplification-of-shared-nodes, --extra-detail=13]
+
+  building:
+    category: building
+    source_table: rbt.building
+    min_zoom: 10
+    ogr2ogr:
+      spatial_index: true
+    tippecanoe:
+      options: [--extra-detail=13, -pk, --coalesce-smallest-as-needed,
+                --simplify-only-low-zooms, --no-simplification-of-shared-nodes,
+                --no-tiny-polygon-reduction-at-maximum-zoom]
+      float_attrs: [height, area]
+      bool_attrs: [has_parts]
+      string_attrs: [class, subtype, id]
+      filter_ref: building
+
+  cemetery:
+    category: cemetery
+    source_table: rbt.cemetery
+    min_zoom: 8
+    tippecanoe:
+      options: [--extra-detail=13, --drop-smallest-as-needed,
+                --simplify-only-low-zooms, --no-simplification-of-shared-nodes,
+                --no-tiny-polygon-reduction-at-maximum-zoom]
+
+  cemetery_label:
+    category: cemetery
+    source_table: rbt.cemetery_label
+    min_zoom: 8
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  geonames_hydrographic:
+    category: geonames
+    source_table: rbt.geonames_hydrographic
+    min_zoom: 1
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+      filter_ref: hydrographic
+
+  populated_places:
+    category: geonames
+    source_table: rbt.populated_places
+    min_zoom: 3
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+      filter_ref: populated_places
+
+  highway:
+    category: transportation
+    source_table: rbt.highway
+    min_zoom: 6
+    tippecanoe:
+      options: [-D, "11", --simplify-only-low-zooms,
+                --no-simplification-of-shared-nodes, --extra-detail=13,
+                -pk, -pf]
+      int_attrs: [name_len, ref_len, ref_number_len, lane, geom_len, osm_id]
+
+  railway:
+    category: transportation
+    source_table: rbt.railway
+    min_zoom: 6
+    tippecanoe:
+      options: [--extra-detail=13, -pk, -pf,
+                --simplify-only-low-zooms, --no-simplification-of-shared-nodes]
+      filter_ref: railway
+
+  ferry:
+    category: transportation
+    source_table: rbt.ferry
+    min_zoom: 4
+    tippecanoe:
+      options: [--extra-detail=13, -pk, -pf]
+
+  port_surface:
+    category: transportation
+    source_table: rbt.port_surface
+    min_zoom: 6
+    tippecanoe:
+      options: [--extra-detail=13, --drop-smallest-as-needed,
+                --simplify-only-low-zooms, --no-simplification-of-shared-nodes]
+
+  port_label:
+    category: transportation
+    source_table: rbt.port_label
+    min_zoom: 6
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  railway_station:
+    category: transportation
+    source_table: rbt.railway_station
+    min_zoom: 10
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  railway_station_label:
+    category: transportation
+    source_table: rbt.railway_station_label
+    min_zoom: 10
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  yard_label:
+    category: transportation
+    source_table: rbt.yard_label
+    min_zoom: 10
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  lock:
+    category: transportation
+    source_table: rbt.lock
+    min_zoom: 10
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  lock_label:
+    category: transportation
+    source_table: rbt.lock_label
+    min_zoom: 10
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  dam_surface:
+    category: utilities
+    source_table: rbt.dam_surface
+    min_zoom: 8
+    tippecanoe:
+      options: [--extra-detail=13, --drop-smallest-as-needed,
+                --simplify-only-low-zooms]
+      filter_ref: utility
+
+  dam_curve:
+    category: utilities
+    source_table: rbt.dam_curve
+    min_zoom: 8
+    tippecanoe:
+      options: [--extra-detail=13, -pk, -pf]
+
+  dam_label:
+    category: utilities
+    source_table: rbt.dam_label
+    min_zoom: 8
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  grain_srf:
+    category: utilities
+    source_table: rbt.grain_srf
+    min_zoom: 10
+    tippecanoe:
+      options: [--extra-detail=13, --drop-smallest-as-needed]
+
+  grain_srf_pnt:
+    category: utilities
+    source_table: rbt.grain_srf_pnt
+    min_zoom: 10
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  hydrocarbon_field:
+    category: utilities
+    source_table: rbt.hydrocarbon_field
+    min_zoom: 6
+    tippecanoe:
+      options: [--extra-detail=13, --drop-smallest-as-needed,
+                --simplify-only-low-zooms]
+
+  hydrocarbon_label:
+    category: utilities
+    source_table: rbt.hydrocarbon_label
+    min_zoom: 6
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  powerline:
+    category: utilities
+    source_table: rbt.powerline
+    min_zoom: 8
+    tippecanoe:
+      options: [--extra-detail=13, -pk, -pf]
+
+  pipeline:
+    category: utilities
+    source_table: rbt.pipeline
+    min_zoom: 6
+    tippecanoe:
+      options: [--extra-detail=13, -pk, -pf]
+
+  utility_point:
+    category: utilities
+    source_table: rbt.utility_point
+    min_zoom: 6
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+      filter_ref: utility
+
+  power_station:
+    category: utilities
+    source_table: rbt.power_station
+    min_zoom: 10
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  power_station_label:
+    category: utilities
+    source_table: rbt.power_station_label
+    min_zoom: 10
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  pumping_station:
+    category: utilities
+    source_table: rbt.pumping_station
+    min_zoom: 10
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  pumping_station_label:
+    category: utilities
+    source_table: rbt.pumping_station_label
+    min_zoom: 10
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  stadium_surface:
+    category: other
+    source_table: rbt.stadium_surface
+    min_zoom: 10
+    tippecanoe:
+      options: [--extra-detail=13, --drop-smallest-as-needed]
+
+  stadium_labels:
+    category: other
+    source_table: rbt.stadium_labels
+    min_zoom: 10
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  us_military_installations:
+    category: other
+    source_table: rbt.us_military_installations
+    min_zoom: 6
+    tippecanoe:
+      options: [--extra-detail=13, --drop-smallest-as-needed,
+                --simplify-only-low-zooms]
+
+  us_military_installations_labels:
+    category: other
+    source_table: rbt.us_military_installations_labels
+    min_zoom: 6
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  radar_point:
+    category: other
+    source_table: rbt.radar_point
+    min_zoom: 8
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+physical:
+  builtuparea:
+    category: builtuparea
+    source_table: rbt.builtuparea
+    min_zoom: 3
+    tippecanoe:
+      options: [--drop-smallest-as-needed, --simplify-only-low-zooms]
+
+  contour:
+    category: contour
+    source_table: rbt.contour
+    projections: [3857, 3395]
+    min_zoom: 9
+    tippecanoe:
+      options: [--extra-detail=13, --simplify-only-low-zooms,
+                --no-simplification-of-shared-nodes]
+      int_attrs: [elevation]
+
+  contour_glacier:
+    category: contour
+    source_table: rbt.contour_glacier
+    projections: [3857, 3395]
+    min_zoom: 9
+    tippecanoe:
+      options: [--extra-detail=13, --simplify-only-low-zooms,
+                --no-simplification-of-shared-nodes]
+
+  glacier:
+    category: glacier
+    source_table: rbt.glacier
+    min_zoom: 3
+    tippecanoe:
+      options: [--extra-detail=13, --drop-smallest-as-needed,
+                --simplify-only-low-zooms]
+
+  landcover:
+    category: landcover
+    source_table: rbt.landcover
+    min_zoom: 3
+    tippecanoe:
+      options: [--extra-detail=13, --drop-smallest-as-needed,
+                --simplify-only-low-zooms,
+                --no-tiny-polygon-reduction-at-maximum-zoom]
+
+  landcover_labels:
+    category: landcover
+    source_table: rbt.landcover_labels
+    min_zoom: 5
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  mountain_label:
+    category: mountain
+    source_table: rbt.mountain_label
+    min_zoom: 6
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+      int_attrs: [elevation]
+
+  park:
+    category: park
+    source_table: rbt.park
+    min_zoom: 3
+    tippecanoe:
+      options: [--extra-detail=13, --drop-smallest-as-needed,
+                --simplify-only-low-zooms]
+
+  water:
+    category: water
+    source_table: rbt.water
+    min_zoom: 0
+    tippecanoe:
+      options: [--extra-detail=13, --drop-smallest-as-needed,
+                --simplify-only-low-zooms,
+                --no-simplification-of-shared-nodes,
+                --no-tiny-polygon-reduction-at-maximum-zoom]
+
+  ne_water_labels:
+    category: water_label
+    source_table: rbt.ne_water_labels
+    projections: [3857, 3395]
+    min_zoom: 0
+    tippecanoe:
+      options: [-r, "1", -pk, -pf]
+
+  waterway:
+    category: waterway
+    source_table: rbt.waterway
+    projections: [3857, 3395]
+    min_zoom: 6
+    tippecanoe:
+      options: [--extra-detail=13, --simplify-only-low-zooms,
+                --no-simplification-of-shared-nodes]
+
+  inland_water_intermittent:
+    category: inland_water
+    source_table: rbt.inland_water_intermittent
+    projections: [3857, 3395]
+    min_zoom: 8
+    tippecanoe:
+      options: [--extra-detail=13, -X, --drop-smallest-as-needed,
+                --detect-longitude-wraparound, --simplify-only-low-zooms,
+                --reorder, --coalesce,
+                --no-tiny-polygon-reduction-at-maximum-zoom]
+
+# Category → list of layer keys. Used for --transportation / --building / etc.
+categories:
+  cultural:
+    aeroway: [aeroway_surface, airports, heliports, runway_curve]
+    boundary: [adm0_labels, adm0_lines, adm1_labels, adm1_lines, adm2_labels, adm2_lines]
+    building: [building]
+    cemetery: [cemetery, cemetery_label]
+    geonames: [geonames_hydrographic, populated_places]
+    transportation:
+      - highway
+      - railway
+      - ferry
+      - port_surface
+      - port_label
+      - railway_station
+      - railway_station_label
+      - yard_label
+      - lock
+      - lock_label
+    utilities:
+      - dam_surface
+      - dam_curve
+      - dam_label
+      - grain_srf
+      - grain_srf_pnt
+      - hydrocarbon_field
+      - hydrocarbon_label
+      - powerline
+      - pipeline
+      - utility_point
+      - power_station
+      - power_station_label
+      - pumping_station
+      - pumping_station_label
+    other:
+      - stadium_surface
+      - stadium_labels
+      - us_military_installations
+      - us_military_installations_labels
+      - radar_point
+  physical:
+    builtuparea: [builtuparea]
+    contour: [contour, contour_glacier]
+    glacier: [glacier]
+    landcover: [landcover, landcover_labels]
+    mountain: [mountain_label]
+    park: [park]
+    water: [water]
+    water_label: [ne_water_labels]
+    waterway: [waterway]
+    inland_water: [inland_water_intermittent]
+
+# Projection metadata — referenced by both Bash and Python generators.
+projections:
+  3857:
+    epsg: "EPSG:3857"
+    output_dir: "physical_tiles_3857"   # cultural overrides per layer_type
+    tile_origin_x: "-20037508.343"
+    tile_origin_y: "20037508.343"
+    tile_dimension_zoom_0: "40075016.686"
+  3395:
+    epsg: "EPSG:3395"
+    output_dir: "physical_tiles_3395"
+    tile_origin_x: "-20037508.343"
+    tile_origin_y: "20037508.343"
+    tile_dimension_zoom_0: "40075016.686"
+  4326:
+    epsg: "EPSG:4326"
+    output_dir: "physical_tiles_4326"
+    tile_origin_x: "-180"
+    tile_origin_y: "90"
+    tile_dimension_zoom_0: "360"

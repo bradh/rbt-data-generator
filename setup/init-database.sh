@@ -24,40 +24,20 @@ readonly PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 readonly START_TIME=$(date +%s)
 readonly TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
-# Source configuration file if available
-CONFIG_DIR="${PROJECT_ROOT}/config"
-if [[ -f "${CONFIG_DIR}/rbt.conf" ]]; then
-    echo "Loading configuration from ${CONFIG_DIR}/rbt.conf"
-    # shellcheck source=/dev/null
-    source "${CONFIG_DIR}/rbt.conf"
-fi
+# Load shared config (DATABASE_*, legacy PG_*, libpq env, RBT_PROJECT_ROOT).
+source "${PROJECT_ROOT}/scripts/lib/config.sh"
+rbt_config_load
 
-# Resolve database configuration (config first, then environment overrides)
-: "${DATABASE_HOST:=${PG_HOST:-localhost}}"
-: "${DATABASE_PORT:=${PG_PORT:-5432}}"
-: "${DATABASE_NAME:=${PG_DATABASE:-rbt}}"
-: "${DATABASE_USER:=${PG_USR:-postgres}}"
-: "${DATABASE_PASSWORD:=${PG_PASS:-}}"
-
-# Maintain backward-compatible environment variables for scripts that still
-# expect PG_* names while ensuring everything defaults to the centralized config.
-export PG_HOST="${PG_HOST:-${DATABASE_HOST}}"
-export PG_PORT="${PG_PORT:-${DATABASE_PORT}}"
-export PG_USR="${PG_USR:-${DATABASE_USER}}"
-export PG_PASS="${PG_PASS:-${DATABASE_PASSWORD}}"
-
-# Connection strings reused throughout the script
-readonly ADMIN_DB_CONN="host=${DATABASE_HOST} port=${DATABASE_PORT} dbname=postgres user=${DATABASE_USER} password=${DATABASE_PASSWORD}"
-readonly RBT_DB_CONN="host=${DATABASE_HOST} port=${DATABASE_PORT} dbname=${DATABASE_NAME} user=${DATABASE_USER} password=${DATABASE_PASSWORD}"
+# Connection strings reused throughout the script.
+ADMIN_DB_CONN="$(rbt_psql_conn_string postgres)"
+RBT_DB_CONN="$(rbt_psql_conn_string)"
+readonly ADMIN_DB_CONN
+readonly RBT_DB_CONN
 
 set_database_env() {
-    export PGHOST="${DATABASE_HOST}"
-    export PGPORT="${DATABASE_PORT}"
-    export PGUSER="${DATABASE_USER}"
-    export PGDATABASE="${DATABASE_NAME}"
-    export PGPASSWORD="${DATABASE_PASSWORD}"
-    export PG_USR="${DATABASE_USER}"
-    export PG_PASS="${DATABASE_PASSWORD}"
+    # `rbt_config_load` already exported PG* / DATABASE_* / libpq env vars.
+    # This shim is preserved for backward compatibility with downstream scripts.
+    :
 }
 
 # Configuration

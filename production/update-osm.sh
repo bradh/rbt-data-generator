@@ -13,29 +13,14 @@ readonly SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-# Source configuration
-readonly CONFIG_FILE="${PROJECT_ROOT}/config/rbt.conf"
-if [[ -f "$CONFIG_FILE" ]]; then
-    source "$CONFIG_FILE"
-else
-    echo "ERROR: Configuration file not found: $CONFIG_FILE" >&2
-    exit 1
-fi
+source "${PROJECT_ROOT}/scripts/lib/config.sh"
+rbt_config_load
 
-# Resolve database configuration (config first, env overrides second)
-: "${DATABASE_HOST:=${PG_HOST:-localhost}}"
-: "${DATABASE_PORT:=${PG_PORT:-5432}}"
-: "${DATABASE_NAME:=${PG_DATABASE:-rbt}}"
-: "${DATABASE_USER:=${PG_USR:-postgres}}"
-: "${DATABASE_PASSWORD:=${PG_PASS:-}}"
+CONFIG_FILE="${RBT_PROJECT_ROOT}/config/rbt.conf"
+readonly CONFIG_FILE
 
-# Backward-compatible exports for scripts/tools expecting PG_* names
-export PG_HOST="${PG_HOST:-${DATABASE_HOST}}"
-export PG_PORT="${PG_PORT:-${DATABASE_PORT}}"
-export PG_USR="${PG_USR:-${DATABASE_USER}}"
-export PG_PASS="${PG_PASS:-${DATABASE_PASSWORD}}"
-
-readonly RBT_DB_CONN="host=${DATABASE_HOST} port=${DATABASE_PORT} dbname=${DATABASE_NAME} user=${DATABASE_USER} password=${DATABASE_PASSWORD}"
+RBT_DB_CONN="$(rbt_psql_conn_string)"
+readonly RBT_DB_CONN
 
 readonly LOG_DIR="${SHARED_LOG_DIR:-${PROJECT_ROOT}/output/logs}"
 readonly LOG_FILE="${LOG_DIR}/osm_updates_$(date +%Y%m%d_%H%M%S).log"

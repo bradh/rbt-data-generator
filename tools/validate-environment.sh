@@ -8,30 +8,14 @@ set -euo pipefail
 # variables are properly configured for RBT Vector Tiles.
 # =============================================================================
 
-# Source configuration file
-CONFIG_FILE="$(dirname "$0")/../config/rbt.conf"
-if [[ -f "$CONFIG_FILE" ]]; then
-    source "$CONFIG_FILE"
-else
-    echo "Warning: Configuration file not found at $CONFIG_FILE"
-    echo "Using default values and environment variables only."
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+source "${PROJECT_ROOT}/scripts/lib/config.sh"
+rbt_config_load
 
-# Resolve database configuration, preferring config values but allowing overrides
-: "${DATABASE_HOST:=${PG_HOST:-localhost}}"
-: "${DATABASE_PORT:=${PG_PORT:-5432}}"
-: "${DATABASE_NAME:=${PG_DATABASE:-rbt}}"
-: "${DATABASE_USER:=${PG_USR:-postgres}}"
-: "${DATABASE_PASSWORD:=${PG_PASS:-}}"
-
-# Keep backward-compatible PG_* variables in sync for scripts that still rely on them
-export PG_HOST="${PG_HOST:-${DATABASE_HOST}}"
-export PG_PORT="${PG_PORT:-${DATABASE_PORT}}"
-export PG_USR="${PG_USR:-${DATABASE_USER}}"
-export PG_PASS="${PG_PASS:-${DATABASE_PASSWORD}}"
-
-readonly ADMIN_DB_CONN="host=${DATABASE_HOST} port=${DATABASE_PORT} dbname=postgres user=${DATABASE_USER} password=${DATABASE_PASSWORD}"
-readonly RBT_DB_CONN="host=${DATABASE_HOST} port=${DATABASE_PORT} dbname=${DATABASE_NAME} user=${DATABASE_USER} password=${DATABASE_PASSWORD}"
+ADMIN_DB_CONN="$(rbt_psql_conn_string postgres)"
+RBT_DB_CONN="$(rbt_psql_conn_string)"
+readonly ADMIN_DB_CONN RBT_DB_CONN
 
 # Colors for output
 readonly RED='\033[0;31m'

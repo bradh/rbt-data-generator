@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  shell-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: shellcheck
+        run: |
+          set -euxo pipefail
+          find setup production tools scripts \
+            -type f -name "*.sh" -print0 \
+            | xargs -0 shellcheck --severity=warning --external-sources
+
+  sql-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install sqlfluff
+        run: pip install "sqlfluff>=3.0"
+      - name: sqlfluff lint (non-blocking)
+        continue-on-error: true
+        run: |
+          sqlfluff lint setup/data-sources/schemas tools \
+            --dialect postgres --disable-progress-bar
+
+  dockerfile-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile.production
+
+  yaml-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install yamllint
+      - run: |
+          yamllint -d '{extends: default, rules: {line-length: disable, document-start: disable, comments: {min-spaces-from-content: 1}, truthy: {check-keys: false}}}' \
+            config/layers.yml config/prometheus.yml \
+            .github/workflows
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+      - name: Set up Python + deps
+        run: |
+          ~/.local/bin/uv sync --extra dev
+      - name: Ruff
+        run: ~/.local/bin/uv run ruff check src tests
+      - name: Pytest
+        run: ~/.local/bin/uv run pytest -q
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    needs: [shell-lint]
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_USER: rbt_user
+          POSTGRES_PASSWORD: rbt_password
+          POSTGRES_DB: rbt
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rbt_user -d rbt"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PG_HOST: localhost
+      PG_PORT: 5432
+      PG_DATABASE: rbt
+      PG_USR: rbt_user
+      PG_PASS: rbt_password
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install runtime dependencies
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17 gdal-bin sqlite3
+      - name: Dry-run validation
+        run: |
+          # The validator expects all tools present; use the dry-run smoke portion only.
+          ./production/generate-tiles.sh --layer-type physical --projection 3857 --water --dry-run
+          ./production/generate-tiles.sh --layer-type cultural --projection 4326 --building --dry-run

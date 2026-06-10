@@ -1,160 +1,101 @@
 #!/bin/bash
-
-# Exit on any error, undefined variables, and pipe failures
 set -euo pipefail
 
-# Source configuration file if available
+# =============================================================================
+# Cultural schema dispatcher
+# =============================================================================
+# Runs one or more cultural PL/pgSQL files via psql. Data-driven by the
+# LAYER_FILES map below.
+#
+# Usage:
+#   ./process-cultural-schemas.sh --all
+#   ./process-cultural-schemas.sh --highway --railway
+#   ./process-cultural-schemas.sh --cultural
+# =============================================================================
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_DIR="${SCRIPT_DIR}/../../../../config"
-if [[ -f "${CONFIG_DIR}/rbt.conf" ]]; then
-    echo "Loading configuration from ${CONFIG_DIR}/rbt.conf"
-    # shellcheck source=/dev/null
-    source "${CONFIG_DIR}/rbt.conf"
-fi
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 
-# Set connection parameters
-export PGHOST=${DATABASE_HOST}
-export PGPORT=${DATABASE_PORT}
-export PGUSER=${DATABASE_USER}
-export PGDATABASE=${DATABASE_NAME}
-export PGPASSWORD=${DATABASE_PASSWORD}
+source "${PROJECT_ROOT}/scripts/lib/logging.sh"
+source "${PROJECT_ROOT}/scripts/lib/config.sh"
+rbt_config_load
 
-# Show usage information
+declare -A LAYER_FILES=(
+    [cultural]="cultural-core.sql"
+    [highway]="transportation.sql"
+    [railway]="transportation-railway.sql"
+    [aero]="infrastructure.sql"
+)
+
+ALL_LAYERS=(cultural highway railway aero)
+LOG_DIR="${SHARED_LOG_DIR:-${PROJECT_ROOT}/output/logs}"
+mkdir -p "${LOG_DIR}"
+
+rbt_log_init "${LOG_DIR}/cultural_schemas_$(date +%Y%m%d_%H%M%S).log"
+
 show_usage() {
-    echo "Usage: $0 [OPTION]"
-    echo "Process cultural layer SQL scripts based on the specified option."
-    echo ""
-    echo "Options:"
-    echo "  --all        Process all SQL scripts (cultural, highway, railway, aero)"
-    echo "  --cultural   Process only cultural.sql"
-    echo "  --highway    Process only highway.sql"
-    echo "  --railway    Process only railway.sql"
-    echo "  --aero       Process only aero.sql"
-    echo "  --help       Show this help message"
-    echo ""
-    echo "Environment variables required:"
-    echo "  PG_USR       PostgreSQL username"
-    echo "  PG_PASS      PostgreSQL password"
+    cat <<EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Process cultural layer SQL files.
+
+Options:
+  --all        Run all cultural schemas (${ALL_LAYERS[*]})
+  --cultural   Run only cultural-core.sql
+  --highway    Run only transportation.sql
+  --railway    Run only transportation-railway.sql
+  --aero       Run only infrastructure.sql
+  --help       Show this help
+EOF
 }
 
-# Validate required environment variables
-validate_environment() {
-    if [[ -z "${PG_USR:-}" ]]; then
-        echo "Error: PG_USR environment variable is not set" >&2
-        exit 1
+run_layer() {
+    local layer="$1"
+    local sql_file="${LAYER_FILES[$layer]:-}"
+    if [[ -z "${sql_file}" ]]; then
+        rbt_log "ERROR" "Unknown layer: ${layer}"
+        return 2
     fi
 
-    if [[ -z "${PG_PASS:-}" ]]; then
-        echo "Error: PG_PASS environment variable is not set" >&2
-        exit 1
-    fi
-}
+    rbt_log "STEP" "Processing cultural/${layer} (${sql_file})"
+    local per_run_log="${LOG_DIR}/${layer}_execution_$(date +%Y%m%d_%H%M%S).log"
 
-# Ensure logs directory exists
-setup_logging() {
-    local LOG_DIR="${SHARED_LOG_DIR:-logs}"
-    mkdir -p "$LOG_DIR"
-}
-
-# Execute cultural layer SQL script
-run_cultural() {
-    local LOG_DIR="${SHARED_LOG_DIR:-logs}"
-    echo "Starting cultural layer processing..."
-    if psql -f cultural-core.sql 2>&1 | tee "${LOG_DIR}/cultural_execution_$(date +%Y%m%d_%H%M%S).log"; then
-        echo "Cultural layer processing completed successfully!"
+    if (cd "${SCRIPT_DIR}" && psql -f "${sql_file}") 2>&1 | tee "${per_run_log}"; then
+        rbt_log "SUCCESS" "cultural/${layer} completed"
     else
-        echo "Error: Cultural layer processing failed!" >&2
-        exit 1
+        rbt_log "ERROR" "cultural/${layer} failed — see ${per_run_log}"
+        return 1
     fi
 }
 
-# Execute highway layer SQL script
-run_highway() {
-    local LOG_DIR="${SHARED_LOG_DIR:-logs}"
-    echo "Starting highway layer processing..."
-    if psql -f transportation.sql 2>&1 | tee "${LOG_DIR}/highway_execution_$(date +%Y%m%d_%H%M%S).log"; then
-        echo "Highway layer processing completed successfully!"
-    else
-        echo "Error: Highway layer processing failed!" >&2
-        exit 1
-    fi
-}
-
-# Execute railway layer SQL script
-run_railway() {
-    local LOG_DIR="${SHARED_LOG_DIR:-logs}"
-    echo "Starting railway layer processing..."
-    if psql -f transportation-railway.sql 2>&1 | tee "${LOG_DIR}/railway_execution_$(date +%Y%m%d_%H%M%S).log"; then
-        echo "Railway layer processing completed successfully!"
-    else
-        echo "Error: Railway layer processing failed!" >&2
-        exit 1
-    fi
-}
-
-# Execute aero layer SQL script
-run_aero() {
-    local LOG_DIR="${SHARED_LOG_DIR:-logs}"
-    echo "Starting aero layer processing..."
-    if psql -f infrastructure.sql 2>&1 | tee "${LOG_DIR}/aero_execution_$(date +%Y%m%d_%H%M%S).log"; then
-        echo "Aero layer processing completed successfully!"
-    else
-        echo "Error: Aero layer processing failed!" >&2
-        exit 1
-    fi
-}
-
-# Execute all SQL scripts
-run_all() {
-    run_cultural
-    run_highway
-    run_railway
-    run_aero
-}
-
-# Parse command line arguments
-if [[ $# -eq 0 ]]; then
-    echo "Error: No arguments provided" >&2
-    echo ""
-    show_usage
-    exit 1
-fi
-
-# Validate environment and setup
-validate_environment
-setup_logging
-
-# Process arguments
-case "$1" in
-    --all)
-        echo "Processing all SQL scripts..."
-        run_all
-        echo "All processing completed successfully!"
-        ;;
-    --cultural)
-        echo "Processing cultural layer only..."
-        run_cultural
-        ;;
-    --highway)
-        echo "Processing highway layer only..."
-        run_highway
-        ;;
-    --railway)
-        echo "Processing railway layer only..."
-        run_railway
-        ;;
-    --aero)
-        echo "Processing aero layer only..."
-        run_aero
-        ;;
-    --help)
-        show_usage
-        exit 0
-        ;;
-    *)
-        echo "Error: Unknown option '$1'" >&2
-        echo ""
+main() {
+    if [[ $# -eq 0 ]]; then
         show_usage
         exit 1
-        ;;
-esac
+    fi
+
+    local selected=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --all) selected=("${ALL_LAYERS[@]}") ;;
+            --cultural|--highway|--railway|--aero) selected+=("${1#--}") ;;
+            --help|-h) show_usage; exit 0 ;;
+            *) rbt_log "ERROR" "Unknown option: $1"; show_usage; exit 1 ;;
+        esac
+        shift
+    done
+
+    if [[ ${#selected[@]} -eq 0 ]]; then
+        rbt_log "ERROR" "No layers selected"
+        show_usage
+        exit 1
+    fi
+
+    for layer in "${selected[@]}"; do
+        run_layer "${layer}"
+    done
+
+    rbt_log "SUCCESS" "Cultural schema processing finished"
+}
+
+main "$@"
