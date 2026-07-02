@@ -100,12 +100,73 @@ bug (undefined `*_TABLES` variables), so cultural 4326 differences where the
 
 ## 4. After the runbook passes
 
-Open a follow-up PR that removes:
+Open a follow-up PR that removes the bash tile-generation path end to end.
+Work through this checklist in order — each group depends on the previous
+one still compiling/passing, so remove code before docs, and docs before
+closing this runbook out.
 
-- `production/tile-generation/` (all four generators)
-- `production/generate-tiles.sh`
-- the `--mode` option and `bash.generate_tiles_bash` in `src/rbt/`
-- the "deprecated bash path" step in `.github/workflows/ci.yml`
-- this runbook's escape-hatch references in the docs
+### 4.1 Bash scripts
+
+- [ ] `production/generate-tiles.sh`
+- [ ] `production/tile-generation/` (all four generators: physical/cultural x
+      3857-3395/4326)
+- [ ] `production/README.md` (the script-level docs for what's being deleted)
+
+### 4.2 Python: the `--mode bash` escape hatch
+
+- [ ] `src/rbt/commands/tiles.py`: remove the `Mode` enum, the `--mode`
+      option on `tiles_entry`, `_dispatch_bash`, and the
+      `TileRequest.mode`/`.all_` fields once nothing branches on them.
+- [ ] `src/rbt/bash.py`: remove `generate_tiles_bash` (and `delegate`/
+      `_script_path` too, if the four data importers are the only remaining
+      callers — check first, they are expected to survive this cleanup).
+- [ ] `tests/test_cli_commands.py`: remove
+      `test_cli_tiles_mode_bash_delegates_to_generate_tiles_sh`.
+- [ ] `tests/test_bash_delegate.py`: remove or narrow to the surviving
+      importer-delegation tests only.
+
+### 4.3 Parity test suite (this module retires itself)
+
+- [ ] `tests/test_parity_bash_native.py` — delete entirely (bash-vs-native
+      command comparison no longer has a bash side to compare against).
+- [ ] `tests/test_parity_golden.py` — delete, **or** keep the golden pin as a
+      plain regression test for `build_tippecanoe_command` if that value is
+      still wanted once bash is gone (decide at removal time).
+- [ ] `tests/test_parity_parsing.py` — delete only if nothing else needs
+      `parse_tippecanoe_argv`; otherwise fold into whichever file replaces
+      the golden test.
+- [ ] `tests/parity_support.py` — delete (shared helpers for the above).
+
+### 4.4 CI
+
+- [ ] `.github/workflows/ci.yml`: remove the `smoke-test` job's "Dry-run
+      validation (deprecated bash path)" step and the `shell-lint` job's
+      `production` entry in the `find` invocation.
+
+### 4.5 Docs
+
+- [ ] This runbook (`docs/parity-runbook.md`) — replace with a short note
+      that the migration is complete, or delete and unlink it from
+      `docs/architecture.md` / `mkdocs.yml`.
+- [ ] `docs/architecture.md`, `docs/project-structure.md`: drop the "hybrid
+      rule" language about `production/` being a deprecated escape hatch;
+      the orchestration rule becomes simply "no bash calls Python, no bash
+      calls bash" for the four remaining importers.
+- [ ] `docs/cli.md` — regenerates automatically from the CLI at the next
+      `mkdocs build` once `--mode`/`Mode` are gone; no manual edit needed.
+- [ ] `docs/configuration.md`, `docs/operations.md`, `docs/troubleshooting.md`,
+      `docs/getting-started.md`, `docs/index.md`, `docs/production-readme.md`
+      — grep for `--mode bash` / `generate-tiles.sh` and remove the
+      escape-hatch mentions.
+- [ ] `README.md`, `CONTRIBUTING.md`, `CHANGELOG.md` — same grep; add a
+      `CHANGELOG.md` entry noting the removal.
+
+### 4.6 Registry-to-bash flag coverage guardrail
+
+`tests/test_parity_bash_native.py::test_bash_generator_accepts_every_registry_category_flag`
+(added alongside this checklist) fails loudly if a new `config/layers.yml`
+category is added without a matching `--<category>` case in
+`generate-tiles.sh`. It naturally disappears with the rest of §4.3 — no
+separate action needed.
 
 Record the parity results (the diff outputs above) in the PR description.

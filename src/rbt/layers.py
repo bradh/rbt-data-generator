@@ -12,6 +12,15 @@ import yaml
 from .paths import config_dir
 
 
+class LayerRegistryError(ValueError):
+    """Raised for a malformed ``config/layers.yml`` (missing/invalid fields).
+
+    Distinct from :class:`KeyError` (used by :meth:`LayerRegistry.layer` for
+    "unknown layer key at CLI time") so registry-load-time schema problems and
+    runtime lookup misses are never confused with each other.
+    """
+
+
 @dataclass(frozen=True, slots=True)
 class Projection:
     code: str
@@ -146,16 +155,32 @@ class LayerRegistry:
         return list(self.categories.get(layer_type, {}).keys())
 
 
-def _build_layer(key: str, layer_type: str, raw: dict[str, Any]) -> Layer:
+def _require(raw: dict[str, Any], key: str, *, context: str) -> Any:
+    try:
+        return raw[key]
+    except KeyError as exc:
+        raise LayerRegistryError(f"{context}: missing required field '{key}'") from exc
+
+
+def _build_layer(
+    key: str, layer_type: str, raw: dict[str, Any], known_projections: set[str]
+) -> Layer:
+    context = f"layer '{key}' ({layer_type})"
     ogr_raw = raw.get("ogr2ogr", {}) or {}
     tipp_raw = raw.get("tippecanoe", {}) or {}
 
     projections = tuple(str(p) for p in raw.get("projections", ["3857", "3395", "4326"]))
+    unknown_projections = set(projections) - known_projections
+    if unknown_projections:
+        raise LayerRegistryError(
+            f"{context}: references unknown projection(s) {sorted(unknown_projections)} "
+            f"— declare them under the 'projections' section first"
+        )
 
     return Layer(
         key=key,
         layer_type=layer_type,
-        source_table=raw["source_table"],
+        source_table=_require(raw, "source_table", context=context),
         category=raw.get("category", key),
         layer_name=raw.get("layer_name", key),
         mbtiles_name=raw.get("mbtiles_name", key),
@@ -204,17 +229,37 @@ def load_registry(path: Path | None = None) -> LayerRegistry:
             tile_dimension_zoom_0=str(info.get("tile_dimension_zoom_0", "0")),
         )
 
+    known_projections = set(projections.keys())
     layers: dict[str, Layer] = {}
     categories: dict[str, dict[str, tuple[str, ...]]] = {}
     for layer_type in ("cultural", "physical"):
         type_layers = raw.get(layer_type, {}) or {}
         for key, layer_raw in type_layers.items():
-            layers[key] = _build_layer(key, layer_type, layer_raw)
+            layers[key] = _build_layer(key, layer_type, layer_raw, known_projections)
 
         type_cats = raw.get("categories", {}).get(layer_type, {}) or {}
         categories[layer_type] = {
             cat: tuple(str(k) for k in keys) for cat, keys in type_cats.items()
         }
+
+    for layer_type, cats in categories.items():
+        for category, layer_keys in cats.items():
+            dangling = [k for k in layer_keys if k not in layers]
+            if dangling:
+                raise LayerRegistryError(
+                    f"categories.{layer_type}.{category}: references unknown layer "
+                    f"key(s) {dangling} — add them under '{layer_type}:' first"
+                )
+
+    schemas: dict[str, SchemaFile] = {}
+    for key, spec in (raw.get("schemas", {}) or {}).items():
+        context = f"schemas.{key}"
+        schemas[str(key)] = SchemaFile(
+            key=str(key),
+            layer_type=str(spec.get("type", "")),
+            sql=str(_require(spec, "sql", context=context)),
+            description=str(spec.get("description", "")),
+        )
 
     return LayerRegistry(
         btp_schema_version=str(meta.get("btp_schema_version", "1.0.0")),
@@ -224,15 +269,18 @@ def load_registry(path: Path | None = None) -> LayerRegistry:
         layers=layers,
         categories=categories,
         gdal_mvt=_build_mvt_config(raw.get("gdal_mvt")),
-        schemas={
-            str(key): SchemaFile(
-                key=str(key),
-                layer_type=str(spec.get("type", "")),
-                sql=str(spec["sql"]),
-                description=str(spec.get("description", "")),
-            )
-            for key, spec in (raw.get("schemas", {}) or {}).items()
-        },
+        schemas=schemas,
+    )
+
+
+def _build_mvt_source_table(table: str, spec: dict[str, Any], *, context: str) -> MvtSourceTable:
+    target = _require(spec, "target", context=context)
+    return MvtSourceTable(
+        source_table=str(table),
+        target_name=str(target),
+        minzoom=int(_require(spec, "minzoom", context=context)),
+        maxzoom=int(_require(spec, "maxzoom", context=context)),
+        description=str(spec.get("description", target)),
     )
 
 
@@ -244,12 +292,10 @@ def _build_mvt_config(raw: dict[str, Any] | None) -> MvtConfig | None:
         groups: dict[str, tuple[MvtSourceTable, ...]] = {}
         for category, tables_raw in (ds_raw.get("groups", {}) or {}).items():
             tables = tuple(
-                MvtSourceTable(
-                    source_table=str(table),
-                    target_name=str(spec["target"]),
-                    minzoom=int(spec["minzoom"]),
-                    maxzoom=int(spec["maxzoom"]),
-                    description=str(spec.get("description", spec["target"])),
+                _build_mvt_source_table(
+                    table,
+                    spec,
+                    context=f"gdal_mvt.datasets.{layer_type}.groups.{category}.{table}",
                 )
                 for table, spec in (tables_raw or {}).items()
             )
@@ -270,6 +316,7 @@ def _build_mvt_config(raw: dict[str, Any] | None) -> MvtConfig | None:
 __all__ = [
     "Layer",
     "LayerRegistry",
+    "LayerRegistryError",
     "MvtConfig",
     "MvtDataset",
     "MvtSourceTable",

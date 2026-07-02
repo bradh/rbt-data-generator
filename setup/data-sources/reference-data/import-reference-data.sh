@@ -46,26 +46,10 @@ readonly SCRIPT_NAME="$(basename "$0")"
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
-# Source configuration file if available
-CONFIG_DIR="${SCRIPT_DIR}/../../../config"
-if [[ -f "${CONFIG_DIR}/rbt.conf" ]]; then
-    echo "Loading configuration from ${CONFIG_DIR}/rbt.conf"
-    # shellcheck source=/dev/null
-    source "${CONFIG_DIR}/rbt.conf"
-fi
-
-# Resolve database configuration (prefer config, allow environment overrides)
-: "${DATABASE_HOST:=${PG_HOST:-localhost}}"
-: "${DATABASE_PORT:=${PG_PORT:-5432}}"
-: "${DATABASE_NAME:=${PG_DATABASE:-rbt}}"
-: "${DATABASE_USER:=${PG_USR:-postgres}}"
-: "${DATABASE_PASSWORD:=${PG_PASS:-}}"
-
-# Keep legacy PG_* variables in sync for dependent scripts/commands
-export PG_HOST="${PG_HOST:-${DATABASE_HOST}}"
-export PG_PORT="${PG_PORT:-${DATABASE_PORT}}"
-export PG_USR="${PG_USR:-${DATABASE_USER}}"
-export PG_PASS="${PG_PASS:-${DATABASE_PASSWORD}}"
+# Single source of truth for config/rbt.conf loading + DATABASE_*/PG_*
+# resolution (see scripts/lib/README.md).
+source "${PROJECT_ROOT}/scripts/lib/config.sh"
+rbt_config_load
 
 # Configuration with fallbacks
 readonly LOG_DIR="${SHARED_LOG_DIR:-${SCRIPT_DIR}/logs}"

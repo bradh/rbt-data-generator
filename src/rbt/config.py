@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import os
 import re
-import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -288,12 +287,4 @@ def load_settings(overrides: dict[str, str] | None = None) -> Settings:
     return settings
 
 
-def shell_env_exports(settings: Settings) -> str:
-    """Return a bash-safe ``KEY=value`` string for the database connection."""
-    pairs: list[str] = []
-    for key, value in {**settings.libpq_env(), **settings.legacy_pg_env()}.items():
-        pairs.append(f"{key}={shlex.quote(value)}")
-    return " ".join(pairs)
-
-
-__all__ = ["Settings", "load_settings", "shell_env_exports", "config_dir"]
+__all__ = ["Settings", "load_settings", "config_dir"]

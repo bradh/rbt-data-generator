@@ -35,7 +35,3 @@ def project_root() -> Path:
 
 def config_dir() -> Path:
     return project_root() / "config"
-
-
-def output_dir() -> Path:
-    return project_root() / "output"

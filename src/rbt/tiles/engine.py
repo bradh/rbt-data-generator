@@ -109,7 +109,7 @@ class TileEngine:
                     job.projection.code,
                 )
                 continue
-            results.append(self._generate_single(layer, job.projection, job.output_dir))
+            results.append(self.generate_single(layer, job.projection, job.output_dir))
 
         if job.tile_join and len(results) > 1:
             merged = job.output_dir / f"{job.layer_type}_{job.projection.code}.mbtiles"
@@ -120,9 +120,7 @@ class TileEngine:
                 log_file=job.output_dir / f"merge_{job.projection.code}.log",
             )
             if job.add_btis and not self.dry_run:
-                apply_btis_metadata(
-                    merged, job.projection, self.registry.btp_schema_version
-                )
+                apply_btis_metadata(merged, job.projection, self.registry.btp_schema_version)
         elif job.add_btis and len(results) == 1 and not self.dry_run:
             apply_btis_metadata(
                 results[0].output,
@@ -139,9 +137,7 @@ class TileEngine:
             # A specific layer selection (e.g. --layer water) narrows the
             # dataset to those layers' categories.
             selected = {layer.category for layer in job.layers}
-            all_layers = {
-                layer.key for layer in self.registry.layers_for_type(job.layer_type)
-            }
+            all_layers = {layer.key for layer in self.registry.layers_for_type(job.layer_type)}
             if {layer.key for layer in job.layers} != all_layers:
                 categories = sorted(selected)
 
@@ -165,9 +161,13 @@ class TileEngine:
             )
         ]
 
-    def _generate_single(
-        self, layer: Layer, projection: Projection, output_dir: Path
-    ) -> TileResult:
+    def generate_single(self, layer: Layer, projection: Projection, output_dir: Path) -> TileResult:
+        """Export one layer to FlatGeoBuf and run tippecanoe on it.
+
+        Public because :func:`generate_layer` (the single layer/projection
+        CLI convenience path) needs it directly, without going through
+        :meth:`generate`'s tile-join/BTIS batching logic.
+        """
         log_file = output_dir / f"{layer.output_basename(projection.code)}.log"
         fgb = export_layer_to_fgb(
             layer,
@@ -214,7 +214,7 @@ def generate_layer(
             categories=[layer.category],
         )
         return engine.generate(job)[0]
-    return engine._generate_single(layer, projection, output_dir)  # noqa: SLF001
+    return engine.generate_single(layer, projection, output_dir)
 
 
 __all__ = ["TileEngine", "TileJob", "TileResult", "generate_layer"]

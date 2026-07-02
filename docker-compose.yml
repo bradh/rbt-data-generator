@@ -44,6 +44,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./config/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
     ports:
       - "127.0.0.1:5432:5432"
     networks:

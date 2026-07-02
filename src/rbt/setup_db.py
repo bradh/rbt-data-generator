@@ -59,6 +59,13 @@ class SetupSteps:
         )
 
 
+def database_exists(conn: psycopg.Connection, name: str) -> bool:
+    """Shared by ``rbt setup`` (create-if-missing) and ``rbt validate`` (report-only)."""
+    return (
+        conn.execute("SELECT 1 FROM pg_database WHERE datname = %s", (name,)).fetchone() is not None
+    )
+
+
 def bootstrap(settings: Settings, *, dry_run: bool = False) -> None:
     """Create the database (if missing) and required extensions."""
     if dry_run:
@@ -71,10 +78,7 @@ def bootstrap(settings: Settings, *, dry_run: bool = False) -> None:
 
     admin_conninfo = settings.psql_conn_string("postgres")
     with psycopg.connect(admin_conninfo, autocommit=True) as conn:
-        exists = conn.execute(
-            "SELECT 1 FROM pg_database WHERE datname = %s", (settings.database_name,)
-        ).fetchone()
-        if not exists:
+        if not database_exists(conn, settings.database_name):
             log.info("creating database %r", settings.database_name)
             conn.execute(
                 sql.SQL("CREATE DATABASE {}").format(sql.Identifier(settings.database_name))
@@ -123,4 +127,4 @@ def run_setup(
     log.info("setup completed")
 
 
-__all__ = ["SetupSteps", "bootstrap", "run_setup"]
+__all__ = ["SetupSteps", "bootstrap", "database_exists", "run_setup"]

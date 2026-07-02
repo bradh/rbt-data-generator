@@ -22,8 +22,8 @@ class _FakeConnection:
     def __enter__(self) -> _FakeConnection:
         return self
 
-    def __exit__(self, *exc_info: object) -> bool:
-        return False
+    def __exit__(self, *exc_info: object) -> None:
+        return None
 
     def execute(self, *args: object, **kwargs: object) -> _FakeCursor:
         return _FakeCursor()
@@ -47,7 +47,7 @@ def _which_all(tool: str) -> str:
 
 
 def test_health_ok(fake_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
-    monkeypatch.setattr(checks.psycopg, "connect", _connect_ok)
+    monkeypatch.setattr(psycopg, "connect", _connect_ok)
     monkeypatch.setattr(shutil, "which", _which_all)
 
     assert checks.health(load_settings()) == 0
@@ -59,7 +59,7 @@ def test_health_ok(fake_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> 
 def test_health_database_failure_exits_1(
     fake_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
-    monkeypatch.setattr(checks.psycopg, "connect", _connect_fail)
+    monkeypatch.setattr(psycopg, "connect", _connect_fail)
     monkeypatch.setattr(shutil, "which", _which_all)
 
     assert checks.health(load_settings()) == 1
@@ -69,7 +69,7 @@ def test_health_database_failure_exits_1(
 def test_health_missing_tools_warn_but_stay_healthy(
     fake_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
-    monkeypatch.setattr(checks.psycopg, "connect", _connect_ok)
+    monkeypatch.setattr(psycopg, "connect", _connect_ok)
     monkeypatch.setattr(shutil, "which", lambda tool: None)
 
     assert checks.health(load_settings()) == 0
@@ -110,7 +110,7 @@ def _disk(free_gb: int):
 def healthy_env(fake_repo: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """fake_repo with every validate() probe stubbed to succeed."""
     _complete_structure(fake_repo)
-    monkeypatch.setattr(checks.psycopg, "connect", _connect_ok)
+    monkeypatch.setattr(psycopg, "connect", _connect_ok)
     monkeypatch.setattr(shutil, "which", _which_all)
     monkeypatch.setattr(checks, "_tool_version", lambda tool: "v0.0-test")
     monkeypatch.setattr(shutil, "disk_usage", _disk(500))
@@ -138,9 +138,7 @@ def test_validate_missing_required_tool_exits_1(
 def test_validate_missing_optional_tool_only_warns(
     healthy_env: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
-    monkeypatch.setattr(
-        shutil, "which", lambda tool: None if tool == "7z" else f"/usr/bin/{tool}"
-    )
+    monkeypatch.setattr(shutil, "which", lambda tool: None if tool == "7z" else f"/usr/bin/{tool}")
     assert checks.validate(load_settings()) == 0
     assert "7z not found (optional)" in capsys.readouterr().out
 
@@ -148,7 +146,7 @@ def test_validate_missing_optional_tool_only_warns(
 def test_validate_database_connection_error_exits_1(
     healthy_env: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
-    monkeypatch.setattr(checks.psycopg, "connect", _connect_fail)
+    monkeypatch.setattr(psycopg, "connect", _connect_fail)
     assert checks.validate(load_settings()) == 1
     assert "Cannot connect to database" in capsys.readouterr().err
 
@@ -165,7 +163,7 @@ def test_validate_reports_missing_required_paths(
     fake_repo: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     # fake_repo deliberately lacks the imposm/reference-data files.
-    monkeypatch.setattr(checks.psycopg, "connect", _connect_ok)
+    monkeypatch.setattr(psycopg, "connect", _connect_ok)
     monkeypatch.setattr(shutil, "which", _which_all)
     monkeypatch.setattr(checks, "_tool_version", lambda tool: "v0.0-test")
     monkeypatch.setattr(shutil, "disk_usage", _disk(500))

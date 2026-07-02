@@ -28,10 +28,19 @@ jobs:
           python-version: "3.12"
       - name: Install sqlfluff
         run: pip install "sqlfluff>=3.0"
-      - name: sqlfluff lint (non-blocking)
+      # tools/duckdb-building-export.sql is DuckDB SQL (INSTALL/LOAD extensions,
+      # SET VARIABLE), not Postgres — linting it under --dialect postgres is a
+      # parse failure, not a real finding, so it's excluded from this target
+      # rather than counted as a "legacy" violation.
+      #
+      # setup/data-sources/schemas still has real, unremediated style findings
+      # (spacing, capitalization, keyword-as-identifier, CREATE INDEX
+      # CONCURRENTLY, redundant ELSE NULL); keep this non-blocking until a
+      # dedicated cleanup pass lands, then flip continue-on-error to false.
+      - name: sqlfluff lint (non-blocking pending schema cleanup)
         continue-on-error: true
         run: |
-          sqlfluff lint setup/data-sources/schemas tools \
+          sqlfluff lint setup/data-sources/schemas \
             --dialect postgres --disable-progress-bar
 
   dockerfile-lint:
@@ -67,10 +76,12 @@ jobs:
           ~/.local/bin/uv sync --extra dev
       - name: Ruff
         run: ~/.local/bin/uv run ruff check src tests
+      - name: Ruff format
+        run: ~/.local/bin/uv run ruff format --check src tests
       - name: Mypy
-        run: ~/.local/bin/uv run mypy src
+        run: ~/.local/bin/uv run mypy src tests
       - name: Pytest
-        run: ~/.local/bin/uv run pytest -q
+        run: ~/.local/bin/uv run pytest -q --cov=rbt --cov-report=term-missing --cov-fail-under=92
 
   smoke-test:
     runs-on: ubuntu-latest
@@ -179,10 +190,12 @@ jobs:
         run: curl -LsSf https://astral.sh/uv/install.sh | sh
       - name: Set up Python CLI
         run: ~/.local/bin/uv sync
-      - name: Seed water fixture data
+      - name: Seed water + building fixture data
         run: |
           psql "host=localhost port=5432 dbname=rbt user=rbt_user password=rbt_password" \
             -v ON_ERROR_STOP=1 -f tests/fixtures/seed_water.sql
+          psql "host=localhost port=5432 dbname=rbt user=rbt_user password=rbt_password" \
+            -v ON_ERROR_STOP=1 -f tests/fixtures/seed_building.sql
       - name: Generate water tiles (EPSG:3857, tippecanoe backend)
         run: |
           ~/.local/bin/uv run rbt --no-log-file tiles \
@@ -197,6 +210,30 @@ jobs:
           btp="$(sqlite3 "$mbtiles" "SELECT value FROM metadata WHERE name='btp_schema_version'")"
           test -n "$btp"
           tippecanoe-decode --stats "$mbtiles" | grep -q '"water"'
+      - name: Generate water tiles (EPSG:3395, tippecanoe backend)
+        run: |
+          ~/.local/bin/uv run rbt --no-log-file tiles \
+            --layer-type physical --projection 3395 --water --no-tile-join
+      - name: Verify EPSG:3395 MBTiles output
+        run: |
+          set -euxo pipefail
+          mbtiles=output/tiles/physical/3395/water_3395.mbtiles
+          test -f "$mbtiles"
+          crs="$(sqlite3 "$mbtiles" "SELECT value FROM metadata WHERE name='crs'")"
+          test "$crs" = "EPSG:3395"
+          tippecanoe-decode --stats "$mbtiles" | grep -q '"water"'
+      - name: Generate building tiles (EPSG:3857, cultural, tippecanoe backend)
+        run: |
+          ~/.local/bin/uv run rbt --no-log-file tiles \
+            --layer-type cultural --projection 3857 --building --no-tile-join
+      - name: Verify cultural EPSG:3857 MBTiles output
+        run: |
+          set -euxo pipefail
+          mbtiles=output/tiles/cultural/3857/building_3857.mbtiles
+          test -f "$mbtiles"
+          crs="$(sqlite3 "$mbtiles" "SELECT value FROM metadata WHERE name='crs'")"
+          test "$crs" = "EPSG:3857"
+          tippecanoe-decode --stats "$mbtiles" | grep -q '"building"'
       - name: Generate water tiles (EPSG:4326, GDAL MVT backend)
         run: |
           ~/.local/bin/uv run rbt --no-log-file tiles \

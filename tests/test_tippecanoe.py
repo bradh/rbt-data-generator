@@ -13,11 +13,9 @@ def test_tippecanoe_command_has_required_flags(tmp_path: Path) -> None:
     settings = load_settings()
     registry = load_registry()
     layer = registry.layer("building")
-    projection = registry.projections["3857"]
 
     cmd = build_tippecanoe_command(
         layer=layer,
-        projection=projection,
         settings=settings,
         input_file=tmp_path / "building.fgb",
         output_file=tmp_path / "building.mbtiles",
@@ -39,11 +37,9 @@ def test_int_attr_typings() -> None:
     settings = load_settings()
     registry = load_registry()
     layer = registry.layer("airports")
-    projection = registry.projections["3857"]
 
     cmd = build_tippecanoe_command(
         layer=layer,
-        projection=projection,
         settings=settings,
         input_file=Path("in.fgb"),
         output_file=Path("out.mbtiles"),

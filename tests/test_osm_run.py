@@ -26,13 +26,11 @@ def _pidfile(settings: Settings) -> Path:
 # ---------------------------------------------------------------------------
 
 
-def test_run_updates_dry_run_skips_popen(
-    fake_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_updates_dry_run_skips_popen(fake_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def _boom(*args: object, **kwargs: object) -> None:
         raise AssertionError("subprocess.Popen must not be called in dry-run")
 
-    monkeypatch.setattr(osm_mod.subprocess, "Popen", _boom)
+    monkeypatch.setattr(subprocess, "Popen", _boom)
     settings = load_settings()
     osm_mod.run_updates(settings, dry_run=True)
     assert not _pidfile(settings).exists()

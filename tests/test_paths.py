@@ -41,7 +41,6 @@ def test_project_root_is_cached_until_cleared(tmp_path: Path, monkeypatch) -> No
     assert paths.project_root() == second.resolve()
 
 
-def test_config_and_output_dirs_derive_from_root(fake_repo: Path) -> None:
+def test_config_dir_derives_from_root(fake_repo: Path) -> None:
     root = fake_repo.resolve()
     assert paths.config_dir() == root / "config"
-    assert paths.output_dir() == root / "output"

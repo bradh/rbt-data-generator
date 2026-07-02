@@ -14,10 +14,8 @@ from rbt.tiles.engine import TileEngine, TileJob, TileResult
 
 
 def make_engine(fake_repo: Path, **kwargs: object) -> TileEngine:
-    settings = load_settings(
-        overrides={"TILE_TEMP_DIR": str(fake_repo / "output" / "tile-temp")}
-    )
-    return TileEngine(settings=settings, registry=load_registry(), **kwargs)
+    settings = load_settings(overrides={"TILE_TEMP_DIR": str(fake_repo / "output" / "tile-temp")})
+    return TileEngine(settings=settings, registry=load_registry(), **kwargs)  # type: ignore[arg-type]
 
 
 def patch_tippecanoe_to_touch_output(recorded_run, monkeypatch) -> None:
@@ -33,8 +31,8 @@ def patch_tippecanoe_to_touch_output(recorded_run, monkeypatch) -> None:
     monkeypatch.setattr(rbt.tiles.tippecanoe, "run", run_and_touch)
 
 
-def patch_btis_recorder(monkeypatch) -> list[tuple]:
-    calls: list[tuple] = []
+def patch_btis_recorder(monkeypatch) -> list[tuple[object, ...]]:
+    calls: list[tuple[object, ...]] = []
     monkeypatch.setattr(
         engine_mod, "apply_btis_metadata", lambda *args, **kwargs: calls.append(args)
     )
@@ -55,9 +53,7 @@ def test_resolve_layers_by_type_returns_all(fake_repo: Path) -> None:
 def test_resolve_layers_by_category_subset(fake_repo: Path) -> None:
     engine = make_engine(fake_repo)
 
-    keys = [
-        layer.key for layer in engine.resolve_layers("physical", categories=["water"])
-    ]
+    keys = [layer.key for layer in engine.resolve_layers("physical", categories=["water"])]
 
     assert keys == ["water"]
 
@@ -65,10 +61,7 @@ def test_resolve_layers_by_category_subset(fake_repo: Path) -> None:
 def test_resolve_layers_by_layer_key(fake_repo: Path) -> None:
     engine = make_engine(fake_repo)
 
-    keys = [
-        layer.key
-        for layer in engine.resolve_layers("physical", layer_keys=["waterway"])
-    ]
+    keys = [layer.key for layer in engine.resolve_layers("physical", layer_keys=["waterway"])]
 
     assert keys == ["waterway"]
 
@@ -114,9 +107,7 @@ def test_generate_3857_orders_export_tippecanoe_then_join(
     assert "rbt.water" in recorded_run.commands[0]
     assert recorded_run.commands[1][recorded_run.commands[1].index("-l") + 1] == "water"
     assert "rbt.waterway" in recorded_run.commands[2]
-    assert (
-        recorded_run.commands[3][recorded_run.commands[3].index("-l") + 1] == "waterway"
-    )
+    assert recorded_run.commands[3][recorded_run.commands[3].index("-l") + 1] == "waterway"
 
     merged = output_dir / "physical_3857.mbtiles"
     join_cmd = recorded_run.commands[4]
@@ -126,9 +117,7 @@ def test_generate_3857_orders_export_tippecanoe_then_join(
     assert btis_calls == [(merged, projection, "9.9.9")]
 
 
-def test_generate_single_result_skips_tile_join(
-    fake_repo: Path, recorded_run, monkeypatch
-) -> None:
+def test_generate_single_result_skips_tile_join(fake_repo: Path, recorded_run, monkeypatch) -> None:
     patch_tippecanoe_to_touch_output(recorded_run, monkeypatch)
     btis_calls = patch_btis_recorder(monkeypatch)
 
@@ -174,9 +163,7 @@ def test_generate_skips_layer_not_configured_for_projection(
     results = engine.generate(job)
 
     assert [r.layer.key for r in results if r.layer] == ["water"]
-    assert all(
-        "water_3857_only" not in " ".join(cmd) for cmd in recorded_run.commands
-    )
+    assert all("water_3857_only" not in " ".join(cmd) for cmd in recorded_run.commands)
     # One layer survived, so no tile-join either.
     assert [cmd[0] for cmd in recorded_run.commands] == ["ogr2ogr", "tippecanoe"]
 
@@ -208,13 +195,18 @@ def test_dry_run_never_applies_btis(fake_repo: Path, recorded_run, monkeypatch) 
 # ---------------------------------------------------------------- generate (4326)
 
 
-def test_generate_4326_dispatches_to_gdal_mvt(
-    fake_repo: Path, recorded_run, monkeypatch
-) -> None:
+def test_generate_4326_dispatches_to_gdal_mvt(fake_repo: Path, recorded_run, monkeypatch) -> None:
     seen: dict[str, object] = {}
 
     def fake_generate_mvt_dataset(
-        layer_type, settings, registry, output_root, *, categories=None, dry_run=False, log_file=None
+        layer_type,
+        settings,
+        registry,
+        output_root,
+        *,
+        categories=None,
+        dry_run=False,
+        log_file=None,
     ):
         seen.update(
             layer_type=layer_type,

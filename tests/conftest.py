@@ -6,6 +6,7 @@ import os
 import sqlite3
 import subprocess
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -165,7 +166,7 @@ class RecordedRun:
     """Captures every command dispatched through ``rbt.process``."""
 
     def __init__(self) -> None:
-        self.calls: list[dict] = []
+        self.calls: list[dict[str, object]] = []
 
     def __call__(self, cmd, **kwargs):
         self.calls.append({"cmd": list(cmd), **kwargs})
@@ -173,7 +174,7 @@ class RecordedRun:
 
     @property
     def commands(self) -> list[list[str]]:
-        return [call["cmd"] for call in self.calls]
+        return [cast("list[str]", call["cmd"]) for call in self.calls]
 
 
 @pytest.fixture
@@ -214,9 +215,7 @@ def mbtiles_factory(tmp_path: Path):
                 "strategies": "should-be-removed",
                 **(metadata or {}),
             }
-            conn.executemany(
-                "INSERT INTO metadata (name, value) VALUES (?, ?)", rows.items()
-            )
+            conn.executemany("INSERT INTO metadata (name, value) VALUES (?, ?)", rows.items())
             conn.commit()
         finally:
             conn.close()

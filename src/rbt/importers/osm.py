@@ -77,9 +77,7 @@ def run_updates(settings: Settings, *, dry_run: bool = False) -> None:
 
     existing = _read_pid(settings)
     if existing is not None:
-        raise RuntimeError(
-            f"imposm run already active (pid {existing}); use `rbt osm stop` first"
-        )
+        raise RuntimeError(f"imposm run already active (pid {existing}); use `rbt osm stop` first")
 
     settings.shared_temp_dir.mkdir(parents=True, exist_ok=True)
     log.info("starting continuous OSM updates: %s", " ".join(cmd))
@@ -120,6 +118,8 @@ def run_updates(settings: Settings, *, dry_run: bool = False) -> None:
         for signum, handler in previous_handlers.items():
             signal.signal(signum, handler)
         pidfile.unlink(missing_ok=True)
+        if process.stdout is not None:
+            process.stdout.close()
 
     if stopping:
         log.info("OSM updates stopped (exit %d)", returncode)

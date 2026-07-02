@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import psycopg
 import pytest
 from typer.testing import CliRunner
 
@@ -97,17 +98,13 @@ def osm_dispatch(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     return calls
 
 
-def test_run_setup_defaults_osm_args_to_all(
-    fake_repo: Path, osm_dispatch: list[list[str]]
-) -> None:
+def test_run_setup_defaults_osm_args_to_all(fake_repo: Path, osm_dispatch: list[list[str]]) -> None:
     steps = setup_db.SetupSteps(import_osm=True)
     setup_db.run_setup(load_settings(), load_registry(), steps)
     assert osm_dispatch == [["--all"]]
 
 
-def test_run_setup_passes_explicit_osm_args(
-    fake_repo: Path, osm_dispatch: list[list[str]]
-) -> None:
+def test_run_setup_passes_explicit_osm_args(fake_repo: Path, osm_dispatch: list[list[str]]) -> None:
     steps = setup_db.SetupSteps(import_osm=True)
     setup_db.run_setup(load_settings(), load_registry(), steps, osm_args=["--import"])
     assert osm_dispatch == [["--import"]]
@@ -122,9 +119,7 @@ def osm_leaf_script(fake_repo: Path) -> Path:
     return fake_repo
 
 
-def test_setup_cli_osm_step_dispatches_all_by_default(
-    osm_leaf_script: Path, recorded_run
-) -> None:
+def test_setup_cli_osm_step_dispatches_all_by_default(osm_leaf_script: Path, recorded_run) -> None:
     result = runner.invoke(app, ["--no-log-file", "setup", "--import-osm-data"])
     assert result.exit_code == 0, result.output
 
@@ -150,11 +145,9 @@ def test_setup_cli_osm_arg_passthrough(osm_leaf_script: Path, recorded_run) -> N
 # ---------------------------------------------------------------------------
 
 
-def test_bootstrap_dry_run_never_connects(
-    fake_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_bootstrap_dry_run_never_connects(fake_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def _no_connect(*args: object, **kwargs: object) -> None:
         raise AssertionError("psycopg.connect must not be called in dry-run")
 
-    monkeypatch.setattr(setup_db.psycopg, "connect", _no_connect)
+    monkeypatch.setattr(psycopg, "connect", _no_connect)
     setup_db.bootstrap(load_settings(), dry_run=True)

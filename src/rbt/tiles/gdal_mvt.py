@@ -150,9 +150,7 @@ def generate_mvt_dataset(
     """
     mvt = registry.gdal_mvt
     if mvt is None or layer_type not in mvt.datasets:
-        raise KeyError(
-            f"No gdal_mvt dataset for layer type {layer_type!r} in config/layers.yml"
-        )
+        raise KeyError(f"No gdal_mvt dataset for layer type {layer_type!r} in config/layers.yml")
     dataset = mvt.datasets[layer_type]
 
     selected_categories = [c for c in (categories or []) if c in dataset.groups]

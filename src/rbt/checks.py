@@ -3,6 +3,13 @@
 Replaces ``tools/health-check.sh``, ``tools/validate-environment.sh``, and
 ``tools/smoke-test.sh``. ``health`` is the Docker HEALTHCHECK command, so it
 must stay fast and dependency-light.
+
+``CheckReport`` prints directly to stdout (info/ok/warn) and stderr (error)
+rather than routing through :mod:`rbt.logging`'s ``RichHandler`` (which
+writes every level to one stream). That is a deliberate exception: these
+functions are human-facing progress reports where the stdout/stderr split
+lets ``rbt validate`` (etc.) be scripted — e.g. ``rbt validate 2>/tmp/errs``
+— which a single combined log stream would not support.
 """
 
 from __future__ import annotations
@@ -19,7 +26,7 @@ from .config import Settings
 from .layers import load_registry
 from .logging import get_logger
 from .schema import run_schemas
-from .setup_db import bootstrap
+from .setup_db import bootstrap, database_exists
 from .tiles.engine import TileEngine, TileJob
 
 log = get_logger(__name__)
@@ -40,6 +47,18 @@ OPTIONAL_TOOLS: dict[str, str] = {
     "sqlite3": "SQLite database utility",
     "docker": "Docker containerization",
 }
+
+# Project-relative paths `_check_project_structure` expects to exist.
+REQUIRED_PATHS: tuple[str, ...] = (
+    "config/rbt.conf",
+    "config/layers.yml",
+    "setup/data-sources/osm/imposm-config.json",
+    "setup/data-sources/osm/imposm-mapping.yaml",
+    "setup/data-sources/osm/import-osm-data.sh",
+    "setup/data-sources/reference-data/import-reference-data.sh",
+    "setup/data-sources/schemas/cultural/cultural-core.sql",
+    "setup/data-sources/schemas/physical/physical-core.sql",
+)
 
 
 @dataclass(slots=True)
@@ -119,10 +138,7 @@ def _total_memory_gb() -> int | None:
     return None
 
 
-def validate(settings: Settings) -> int:
-    """Pre-flight validation of configuration, tools, database, and resources."""
-    report = CheckReport()
-
+def _check_config(settings: Settings, report: CheckReport) -> None:
     print("🔍 Checking configuration...")
     for key, value in (
         ("DATABASE_HOST", settings.database_host),
@@ -138,6 +154,8 @@ def validate(settings: Settings) -> int:
     report.info(f"Tile cache directory: {settings.tile_cache_dir}")
     report.info(f"Max parallel jobs: {settings.max_parallel_jobs}")
 
+
+def _check_tools(report: CheckReport) -> None:
     print("\n🔍 Checking system dependencies...")
     for tool, description in REQUIRED_TOOLS.items():
         if shutil.which(tool):
@@ -150,40 +168,42 @@ def validate(settings: Settings) -> int:
         else:
             report.warn(f"{description}: {tool} not found (optional)")
 
+
+def _check_database(settings: Settings, report: CheckReport) -> None:
     print("\n🔍 Checking database connection...")
     try:
         with _connect(settings, "postgres") as conn:
             conn.execute("SELECT version()")
             report.ok("Database connection successful")
-            exists = conn.execute(
-                "SELECT 1 FROM pg_database WHERE datname = %s",
-                (settings.database_name,),
-            ).fetchone()
-        if exists:
-            report.ok(f"{settings.database_name} database exists")
-            with _connect(settings) as conn:
-                for extension in settings.database_extensions:
-                    found = conn.execute(
-                        "SELECT 1 FROM pg_extension WHERE extname = %s", (extension,)
-                    ).fetchone()
-                    if found:
-                        report.ok(f"Extension '{extension}' is installed")
-                    else:
-                        report.warn(f"Extension '{extension}' not found")
-                for schema_name in settings.database_schemas:
-                    found = conn.execute(
-                        "SELECT 1 FROM information_schema.schemata WHERE schema_name = %s",
-                        (schema_name,),
-                    ).fetchone()
-                    if found:
-                        report.ok(f"Schema '{schema_name}' exists")
-                    else:
-                        report.warn(f"Schema '{schema_name}' not found (run `rbt setup`)")
-        else:
+            exists = database_exists(conn, settings.database_name)
+        if not exists:
             report.warn(f"{settings.database_name} database does not exist (run `rbt setup`)")
+            return
+
+        report.ok(f"{settings.database_name} database exists")
+        with _connect(settings) as conn:
+            for extension in settings.database_extensions:
+                found = conn.execute(
+                    "SELECT 1 FROM pg_extension WHERE extname = %s", (extension,)
+                ).fetchone()
+                if found:
+                    report.ok(f"Extension '{extension}' is installed")
+                else:
+                    report.warn(f"Extension '{extension}' not found")
+            for schema_name in settings.database_schemas:
+                found = conn.execute(
+                    "SELECT 1 FROM information_schema.schemata WHERE schema_name = %s",
+                    (schema_name,),
+                ).fetchone()
+                if found:
+                    report.ok(f"Schema '{schema_name}' exists")
+                else:
+                    report.warn(f"Schema '{schema_name}' not found (run `rbt setup`)")
     except psycopg.Error as exc:
         report.error(f"Cannot connect to database: {exc}")
 
+
+def _check_disk_space(settings: Settings, report: CheckReport) -> None:
     print("\n🔍 Checking disk space...")
     usage = shutil.disk_usage(settings.project_root)
     available_gb = usage.free // 1024**3
@@ -198,37 +218,32 @@ def validate(settings: Settings) -> int:
             f"({settings.disk_space_required_gb}GB required)"
         )
 
+
+def _check_memory(settings: Settings, report: CheckReport) -> None:
     print("\n🔍 Checking system memory...")
     total_gb = _total_memory_gb()
     if total_gb is None:
         report.warn("Cannot determine system memory")
     elif total_gb >= settings.memory_required_gb:
         report.ok(
-            f"Sufficient memory: {total_gb}GB total "
-            f"({settings.memory_required_gb}GB recommended)"
+            f"Sufficient memory: {total_gb}GB total ({settings.memory_required_gb}GB recommended)"
         )
     else:
         report.warn(
             f"Limited memory: {total_gb}GB total ({settings.memory_required_gb}GB recommended)"
         )
 
+
+def _check_project_structure(settings: Settings, report: CheckReport) -> None:
     print("\n🔍 Checking project structure...")
-    required_paths = (
-        "config/rbt.conf",
-        "config/layers.yml",
-        "setup/data-sources/osm/imposm-config.json",
-        "setup/data-sources/osm/imposm-mapping.yaml",
-        "setup/data-sources/osm/import-osm-data.sh",
-        "setup/data-sources/reference-data/import-reference-data.sh",
-        "setup/data-sources/schemas/cultural/cultural-core.sql",
-        "setup/data-sources/schemas/physical/physical-core.sql",
-    )
-    for rel in required_paths:
+    for rel in REQUIRED_PATHS:
         if (settings.project_root / rel).exists():
             report.ok(f"Exists: {rel}")
         else:
             report.error(f"Required path missing: {rel}")
 
+
+def _print_summary(report: CheckReport) -> None:
     print("\n📋 Validation Summary")
     if report.errors:
         print(f"❌ {len(report.errors)} error(s), {len(report.warnings)} warning(s)")
@@ -236,11 +251,28 @@ def validate(settings: Settings) -> int:
         print(f"⚠️  Passed with {len(report.warnings)} warning(s)")
     else:
         print("✅ All validations passed")
+
+
+def validate(settings: Settings) -> int:
+    """Pre-flight validation of configuration, tools, database, and resources."""
+    report = CheckReport()
+    _check_config(settings, report)
+    _check_tools(report)
+    _check_database(settings, report)
+    _check_disk_space(settings, report)
+    _check_memory(settings, report)
+    _check_project_structure(settings, report)
+    _print_summary(report)
     return report.exit_code
 
 
 def smoke(settings: Settings) -> int:
-    """End-to-end sanity check: validate → bootstrap → schema → tile dry-runs → DB."""
+    """End-to-end sanity check: validate -> bootstrap -> schema -> tile dry-runs -> DB.
+
+    Unlike ``validate``/``health``, this is **not read-only**: steps 2 and 3
+    create the database/extensions (if missing) and run real schema SQL
+    against it. Treat it as a lightweight integration workflow, not a probe.
+    """
     log.info("=== RBT smoke test starting ===")
 
     log.info("step 1/5: validating environment")
@@ -258,7 +290,10 @@ def smoke(settings: Settings) -> int:
 
     log.info("step 4/5: tile generation dry-runs")
     engine = TileEngine(settings=settings, registry=registry, dry_run=True)
-    for layer_type, code, category in (("physical", "3857", "water"), ("cultural", "4326", "building")):
+    for layer_type, code, category in (
+        ("physical", "3857", "water"),
+        ("cultural", "4326", "building"),
+    ):
         projection = registry.projections[code]
         layers = engine.resolve_layers(layer_type, categories=[category])
         engine.generate(

@@ -8,97 +8,108 @@ RBT Vector Tiles uses a centralized configuration file (`config/rbt.conf`) as th
 2. Values in [`config/rbt.conf`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/rbt.conf).
 3. Per-script defaults (usually defensive fallbacks in `scripts/lib/config.sh`).
 
-## Sections
+## Variable ownership
+
+Every table below has an **Owner** column, verified against the actual consumers (not just where a variable is declared in `rbt.conf`):
+
+| Owner | Meaning |
+|---|---|
+| **Python** | Read by `load_settings()` in [`src/rbt/config.py`](https://github.com/MJJ203/rbt-data-generator/blob/main/src/rbt/config.py) only. The bash leaf scripts never see it, even indirectly. |
+| **Bash** | Read only by the bash leaf scripts under `setup/data-sources/` (directly, or via `scripts/lib/config.sh`/`logging.sh`) or the deprecated `production/` generators. The Python CLI never reads it. |
+| **Shared** | Read by both: either the same name resolves in `Settings` *and* in a bash script, or Python passes it to child processes via `Settings.subprocess_env()`. |
+| **Unused** | Declared in `rbt.conf` but not read by anything in this repository today — likely a holdover from a retired script. Kept for backward compatibility with external tooling; safe to ignore. |
 
 ### General processing
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `MAX_PARALLEL_JOBS` | `4` | Default parallelism for import/generation loops. |
-| `RETRY_COUNT` | `3` | Retry attempts for network-bound operations. |
-| `RETRY_DELAY` | `30` | Seconds between retries. |
-| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARN`, `ERROR`. |
+| Variable | Owner | Default | Purpose |
+|---|---|---|---|
+| `MAX_PARALLEL_JOBS` | Python | `4` | Reported by `rbt validate`; not yet wired to real parallelism (see [Performance](performance.md)). Distinct from `SCRIPT_MAX_PARALLEL_JOBS` below. |
+| `RETRY_COUNT` | Python | `3` | Retry attempts for `rbt.process.run_with_retry`. |
+| `RETRY_DELAY` | Shared | `30` | Python retry backoff seconds; `import-osm-data.sh` also falls back to this name (the other three importers use `SCRIPT_RETRY_DELAY` instead — a pre-existing inconsistency, not a typo). |
+| `LOG_LEVEL` | Python | `INFO` | `DEBUG`, `INFO`, `WARN`, `ERROR`. |
 
 ### Tile generation
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `TILE_CACHE_DIR` | `./output/tiles` | Where MBTiles/PBF tiles are written. |
-| `TILE_TEMP_DIR` | `/tmp/tiles` | Scratch space for `tippecanoe -t`. Keep on fast storage. |
-| `TILE_MAX_ZOOM` | `13` | Maximum zoom level. |
-| `TILE_MIN_ZOOM` | `0` | Minimum zoom level. |
-| `SUPPORTED_PROJECTIONS` | `"3857 3395 4326"` | Read-only; edited only when adding support. |
-| `DEFAULT_PROJECTION` | `3857` | Projection used when `--projection` not provided. |
-| `LAYER_TYPES` | `"physical cultural"` | Read-only. |
+| Variable | Owner | Default | Purpose |
+|---|---|---|---|
+| `TILE_CACHE_DIR` | Shared | `./output/tiles` | Where MBTiles/PBF tiles are written. Read by both the native engine and the deprecated bash generators (`--mode bash`). |
+| `TILE_TEMP_DIR` | Shared | `/tmp/tiles` | Scratch space for `tippecanoe -t`. Keep on fast storage. |
+| `TILE_MAX_ZOOM` | Shared | `13` | Maximum zoom level. |
+| `TILE_MIN_ZOOM` | Shared | `0` | Minimum zoom level. |
+| `SUPPORTED_PROJECTIONS` | Bash | `"3857 3395 4326"` | Read-only; the Python CLI derives supported projections from `config/layers.yml` instead. |
+| `DEFAULT_PROJECTION` | Shared | `3857` | Projection used when `--projection` not provided, on both dispatch paths. |
+| `LAYER_TYPES` | Bash | `"physical cultural"` | Read-only; the Python CLI hardcodes the same two types. |
 
 ### Database connection
 
-| Variable | Legacy | Default | Purpose |
-|---|---|---|---|
-| `DATABASE_HOST` | `PG_HOST` | `localhost` | PostgreSQL host. |
-| `DATABASE_PORT` | `PG_PORT` | `5432` | PostgreSQL port. |
-| `DATABASE_NAME` | `PG_DATABASE` | `rbt` | Database name. |
-| `DATABASE_USER` | `PG_USR` | `postgres` | Database user. |
-| `DATABASE_PASSWORD` | `PG_PASS` | *(unset)* | Database password. |
+| Variable | Owner | Legacy | Default | Purpose |
+|---|---|---|---|---|
+| `DATABASE_HOST` | Shared | `PG_HOST` | `localhost` | PostgreSQL host. |
+| `DATABASE_PORT` | Shared | `PG_PORT` | `5432` | PostgreSQL port. |
+| `DATABASE_NAME` | Shared | `PG_DATABASE` | `rbt` | Database name. |
+| `DATABASE_USER` | Shared | `PG_USR` | `postgres` | Database user. |
+| `DATABASE_PASSWORD` | Shared | `PG_PASS` | *(unset)* | Database password. |
+
+These five are resolved independently by both sides using identical rules (`Settings` in Python, `rbt_config_load` in `scripts/lib/config.sh`) — see [Project Tour](project-structure.md#configuration-resolution) for why. Python also bundles them into a `PG*`/`PG_*`/`DATABASE_*` environment for every child process it spawns (`Settings.subprocess_env()`).
 
 ### Database performance tuning
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `DATABASE_WORK_MEM` | `32GB` | Session `work_mem` (ok to lower for small boxes). |
-| `DATABASE_MAINTENANCE_WORK_MEM` | `64GB` | `maintenance_work_mem` during index builds. |
-| `DATABASE_MAX_PARALLEL_WORKERS` | `8` | Matches `max_parallel_workers_per_gather`. |
-| `DATABASE_EFFECTIVE_CACHE_SIZE` | `192GB` | Planner hint; set to ~75% of system RAM. |
-| `DATABASE_MAX_CONNECTIONS` | `100` | Used by docs/ops only; set on the server. |
-| `DATABASE_CONNECTION_TIMEOUT` | `300` | Client-side psql timeout seconds. |
-| `DATABASE_EXTENSIONS` | `"postgis postgis_raster hstore pg_trgm"` | Created during setup. |
-| `DATABASE_SCHEMAS` | `"fieldmap mirta naturalearth ourairports rbt geonames overture"` | Expected schemas after setup. |
+| Variable | Owner | Default | Purpose |
+|---|---|---|---|
+| `DATABASE_WORK_MEM` | Bash | `32GB` | Session `work_mem` (ok to lower for small boxes). Ops/docs reference only — not read by any script. |
+| `DATABASE_MAINTENANCE_WORK_MEM` | Bash | `64GB` | `maintenance_work_mem` during index builds. Ops/docs reference only. |
+| `DATABASE_MAX_PARALLEL_WORKERS` | Bash | `8` | Matches `max_parallel_workers_per_gather`. Ops/docs reference only. |
+| `DATABASE_EFFECTIVE_CACHE_SIZE` | Bash | `192GB` | Planner hint; set to ~75% of system RAM. Ops/docs reference only. |
+| `DATABASE_MAX_CONNECTIONS` | Bash | `100` | Used by docs/ops only; set on the server. |
+| `DATABASE_CONNECTION_TIMEOUT` | Bash | `300` | Client-side psql timeout seconds. Ops/docs reference only. |
+| `DATABASE_EXTENSIONS` | Python | `"postgis postgis_raster hstore pg_trgm"` | Created during `rbt setup`; checked by `rbt validate`. |
+| `DATABASE_SCHEMAS` | Python | `"fieldmap mirta naturalearth ourairports rbt geonames overture"` | Expected schemas after setup; checked by `rbt validate`. |
 
 ### OSM import
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `OSM_LOG_FILE` | `./setup/data-sources/logs/osm_import.log` | Per-run OSM log. |
-| `OSM_DATA_DIR` | `/mnt/data` | Planet PBF + diffs landing zone. |
-| `OSM_CONFIG_FILE` | `./setup/data-sources/osm/imposm-config.json` | imposm3 config. |
-| `OSM_MAPPING_FILE` | `./setup/data-sources/osm/imposm-mapping.yaml` | imposm3 mapping. |
-| `OSM_CACHE_DIR` | `/mnt/cache` | imposm3 cache directory. |
-| `OSM_DIFF_DIR` | `/mnt/diff` | Downloaded OSC diffs. |
-| `OSM_CONNECTION` | `postgis://postgres:postgres@localhost/rbt?prefix=NONE` | imposm3 connection string. |
-| `OSM_SRID` | `3857` | SRID of imposm3-imported tables. |
-| `ARIA2C_MAX_DOWNLOADS` | `12` | Concurrent aria2c downloads. |
-| `ARIA2C_MAX_CONNECTIONS` | `16` | Connections per aria2c download. |
-| `ARIA2C_SPLITS` | `9` | aria2c `--split`. |
-| `WGET_PARALLEL_JOBS` | `8` | Fallback parallelism when wget is used. |
-| `DIFF_START_SEQ` | `713` | Starting diff sequence for bulk backfill. |
-| `DIFF_END_SEQ` | `730` | Ending diff sequence for bulk backfill. |
-| `OSM_CLEANUP_ON_EXIT` | `true` | Remove temp files on exit. |
-| `OSM_VALIDATE_DOWNLOADS` | `true` | Size-check downloaded files. |
-| `OSM_HEALTH_CHECK_PORT` | `8080` | HTTP health port. |
+| Variable | Owner | Default | Purpose |
+|---|---|---|---|
+| `OSM_LOG_FILE` | Bash | `./setup/data-sources/logs/osm_import.log` | Per-run OSM log. |
+| `OSM_DATA_DIR` | Bash | `/mnt/data` | Planet PBF + diffs landing zone. |
+| `OSM_CONFIG_FILE` | Shared | `./setup/data-sources/osm/imposm-config.json` | imposm3 config; read by `Settings.osm_config_file` (Python's `rbt osm run` supervisor) and by `import-osm-data.sh` as a fallback default. |
+| `OSM_MAPPING_FILE` | Bash | `./setup/data-sources/osm/imposm-mapping.yaml` | imposm3 mapping. |
+| `OSM_CACHE_DIR` | Bash | `/mnt/cache` | imposm3 cache directory. |
+| `OSM_DIFF_DIR` | Bash | `/mnt/diff` | Downloaded OSC diffs. |
+| `OSM_CONNECTION` | Bash | `postgis://postgres:postgres@localhost/rbt?prefix=NONE` | imposm3 connection string. |
+| `OSM_SRID` | Bash | `3857` | SRID of imposm3-imported tables. |
+| `ARIA2C_MAX_DOWNLOADS` | Bash | `12` | Concurrent aria2c downloads. |
+| `ARIA2C_MAX_CONNECTIONS` | Bash | `16` | Connections per aria2c download. |
+| `ARIA2C_SPLITS` | Bash | `9` | aria2c `--split`. |
+| `WGET_PARALLEL_JOBS` | Bash | `8` | Fallback parallelism when wget is used. |
+| `DIFF_START_SEQ` | Bash | `713` | Starting diff sequence for bulk backfill. |
+| `DIFF_END_SEQ` | Bash | `730` | Ending diff sequence for bulk backfill. |
+| `OSM_CLEANUP_ON_EXIT` | Bash | `true` | Remove temp files on exit. |
+| `OSM_VALIDATE_DOWNLOADS` | Bash | `true` | Size-check downloaded files. |
+| `OSM_HEALTH_CHECK_PORT` | Unused | `8080` | Not read anywhere; `rbt health` (the Docker `HEALTHCHECK`) takes no port argument. |
 
 ### Shared script settings
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `SHARED_LOG_DIR` | `./output/logs` | Structured log destination. |
-| `SHARED_TEMP_DIR` | `./output/temp` | Shared scratch for importers. |
-| `SCRIPT_MAX_PARALLEL_JOBS` | `4` | Importer job pool size. |
-| `SCRIPT_RETRY_COUNT` | `3` | Retries for importer sub-steps. |
-| `SCRIPT_RETRY_DELAY` | `30` | Retry delay seconds. |
-| `SCRIPT_CONNECTION_TIMEOUT` | `300` | psql connection timeout. |
-| `SCRIPT_PARALLEL_INGESTION` | `false` | Toggle full parallel ingestion. |
-| `SCRIPT_DEBUG` | `false` | Verbose tracing. |
-| `SCRIPT_VERBOSE` | `false` | Progress bars + extra logs. |
-| `SCRIPT_CLEAN_TEMP_FILES` | `false` | Keep temp files for postmortem. |
+| Variable | Owner | Default | Purpose |
+|---|---|---|---|
+| `SHARED_LOG_DIR` | Shared | `./output/logs` | Read by `Settings.shared_log_dir` and directly by the bash importers/`scripts/lib/logging.sh`. |
+| `SHARED_TEMP_DIR` | Shared | `./output/temp` | Read by `Settings.shared_temp_dir` and directly by the bash importers. |
+| `SCRIPT_MAX_PARALLEL_JOBS` | Bash | `4` | Importer job pool size (distinct from Python's `MAX_PARALLEL_JOBS` above). |
+| `SCRIPT_RETRY_COUNT` | Bash | `3` | Retries for importer sub-steps. |
+| `SCRIPT_RETRY_DELAY` | Bash | `30` | Retry delay seconds (three of the four importers; `import-osm-data.sh` uses bare `RETRY_DELAY` instead — see above). |
+| `SCRIPT_CONNECTION_TIMEOUT` | Bash | `300` | psql connection timeout. |
+| `SCRIPT_PARALLEL_INGESTION` | Bash | `false` | Toggle full parallel ingestion. |
+| `SCRIPT_DEBUG` | Shared | `false` | Also accepted by Python as a fallback for `DEBUG` (`Settings.debug`). |
+| `SCRIPT_VERBOSE` | Shared | `false` | Also accepted by Python as a fallback for `VERBOSE` (`Settings.verbose`). |
+| `SCRIPT_CLEAN_TEMP_FILES` | Bash | `false` | Keep temp files for postmortem. |
 
 ### Resource limits
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `DISK_SPACE_REQUIRED_GB` | `100` | Pre-flight check minimum. |
-| `MEMORY_REQUIRED_GB` | `16` | Pre-flight check minimum. |
-| `HEALTH_CHECK_PORT` | `8080` | Container health endpoint. |
-| `HEALTH_CHECK_INTERVAL` | `30` | Health check seconds. |
+| Variable | Owner | Default | Purpose |
+|---|---|---|---|
+| `DISK_SPACE_REQUIRED_GB` | Python | `100` | `rbt validate` pre-flight check minimum. |
+| `MEMORY_REQUIRED_GB` | Python | `16` | `rbt validate` pre-flight check minimum. |
+| `HEALTH_CHECK_PORT` | Unused | `8080` | Not read anywhere; `rbt health` takes no port argument. |
+| `HEALTH_CHECK_INTERVAL` | Unused | `30` | Not read anywhere; the Docker `HEALTHCHECK interval` is set in `Dockerfile.production` instead. |
 
 ## Backward compatibility
 
@@ -112,7 +123,7 @@ rbt_config_load   # sets DATABASE_* + exports PG_* for legacy tools
 ## Verifying your configuration
 
 ```bash
-./tools/validate-environment.sh
+rbt validate
 ```
 
 See [troubleshooting.md](troubleshooting.md) if validation fails.

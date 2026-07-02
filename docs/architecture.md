@@ -71,39 +71,23 @@ The dispatch rule is strict and one-directional:
 
 ### Separation of Concerns
 
-The project is organized around the orchestrator/leaf split:
+The project is organized around the orchestrator/leaf split. See the
+[Project Tour](project-structure.md#repository-layout) for the full annotated
+directory tree — kept in one place so it can't drift between documents; the
+summary here is just the shape of the split:
 
-```
-rbt-data-generator/
-├── src/rbt/         # Python CLI — the orchestrator (`rbt`)
-│   ├── cli.py                    # Typer entry point and subcommands
-│   ├── config.py                 # Frozen Settings (overrides → env → rbt.conf → defaults)
-│   ├── layers.py                 # Declarative layer registry (config/layers.yml)
-│   ├── setup_db.py               # `rbt setup` — bootstrap + step sequencing
-│   ├── schema.py                 # `rbt schema` — PL/pgSQL dispatch via psql
-│   ├── checks.py                 # `rbt validate | smoke | health`
-│   ├── bash.py                   # Delegation to bash leaf scripts
-│   ├── importers/                # osm (incl. `rbt osm run` supervisor),
-│   │                             #   reference, geonames, buildings
-│   └── tiles/                    # engine, exporter, tippecanoe, tile_join,
-│                                 #   btis, gdal_mvt (EPSG:4326 backend)
-├── setup/           # Bash leaf importers + schema SQL
-│   └── data-sources/
-│       ├── osm/                  # import-osm-data.sh, imposm config/mapping
-│       ├── reference-data/       # import-reference-data / geonames / buildings .sh
-│       └── schemas/              # PL/pgSQL view definitions (physical/, cultural/)
-├── production/      # DEPRECATED bash tile generators (`rbt tiles --mode bash`)
-│   ├── generate-tiles.sh
-│   └── tile-generation/
-├── config/          # rbt.conf, layers.yml, postgresql.conf,
-│                    #   tile-server.json, prometheus.yml
-├── tests/           # pytest suite
-├── docs/            # MkDocs documentation (this site)
-└── output/          # Generated outputs
-    ├── tiles/                    # Vector tiles by <layer-type>/<projection>
-    ├── logs/                     # Processing logs
-    └── temp/                     # Shared scratch (incl. imposm pidfile)
-```
+- **`src/rbt/`** — the Python CLI, the *only* orchestrator (`cli.py` +
+  `commands/` for the Typer surface, `tiles/` for the two tile-generation
+  backends, `importers/` for the bash-leaf wrappers).
+- **`setup/data-sources/`** — the four bash leaf importers + PL/pgSQL schema
+  sources.
+- **`production/`** — deprecated bash tile generators, reachable only via
+  `rbt tiles --mode bash` until the [parity runbook](parity-runbook.md)
+  retires them.
+- **`config/`** — `rbt.conf`, `layers.yml`, and the service configs
+  (`postgresql.conf`, `tile-server.json`, `prometheus.yml`).
+- **`tests/`**, **`docs/`**, **`output/`** — pytest suite, this MkDocs site,
+  and generated artifacts (gitignored), respectively.
 
 ### Setup Phase (`rbt setup`)
 

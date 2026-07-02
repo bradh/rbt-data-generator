@@ -14,7 +14,6 @@ log = get_logger(__name__)
 
 def build_tippecanoe_command(
     layer: Layer,
-    projection: Projection,
     settings: Settings,
     input_file: Path,
     output_file: Path,
@@ -78,7 +77,6 @@ def run_tippecanoe(
     output_file = output_dir / f"{layer.output_basename(projection.code)}.mbtiles"
     cmd = build_tippecanoe_command(
         layer=layer,
-        projection=projection,
         settings=settings,
         input_file=input_file,
         output_file=output_file,

@@ -35,9 +35,7 @@ def importer_repo(fake_repo: Path) -> Path:
 def test_import_command_delegates_to_leaf_script(
     command: str, importer_repo: Path, recorded_run
 ) -> None:
-    result = runner.invoke(
-        app, ["--no-log-file", "import", command, "region-a", "region-b"]
-    )
+    result = runner.invoke(app, ["--no-log-file", "import", command, "region-a", "region-b"])
     assert result.exit_code == 0, result.output
 
     root = importer_repo.resolve()

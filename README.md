@@ -37,13 +37,16 @@ cd rbt-data-generator
 cp env.example .env        # edit database credentials
 vi config/rbt.conf         # or edit the centralized config directly
 
-# 2. One-time setup (downloads + imports data; several hours for a planet)
+# 2. Build the rbt image (GDAL + tippecanoe + imposm3 + the CLI)
+docker compose build
+
+# 3. One-time setup (downloads + imports data; several hours for a planet)
 docker compose --profile setup up rbt-setup
 
-# 3. Continuous OSM updates + tile generation
+# 4. Continuous OSM updates + tile generation
 docker compose --profile production up -d
 
-# 4. Optional tile server at http://localhost:8080
+# 5. Optional tile server at http://localhost:8080
 docker compose --profile production --profile serve up -d
 ```
 

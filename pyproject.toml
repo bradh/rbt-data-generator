@@ -27,8 +27,6 @@ dependencies = [
   "typer>=0.12",
   "rich>=13.7",
   "pyyaml>=6.0",
-  "pydantic>=2.6",
-  "pydantic-settings>=2.2",
   "psycopg[binary]>=3.1",
 ]
 
@@ -63,8 +61,6 @@ ignore = [
     "PLR0913",   # too many args (typer commands legitimately have many)
     "PLR2004",   # magic values
     "PLR0911",   # too many return statements
-    "PLR0912",   # too many branches
-    "PLR0915",   # too many statements
     "UP042",     # str + Enum pattern; StrEnum still opt-in for Typer compat
     "B008",      # typer.Option in argument defaults is idiomatic
     "E501",      # long lines — handled by formatter
@@ -75,7 +71,6 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["PLR2004", "PLR0912", "PLR0915", "S101"]
-"src/rbt/cli.py" = ["PLR0912", "PLR0915", "FBT001", "FBT002"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -83,10 +78,19 @@ addopts = "-ra --strict-markers"
 filterwarnings = [
     "error",
     "default::pytest.PytestUnraisableExceptionWarning",
-    "default::ResourceWarning",
 ]
 
 [tool.mypy]
 python_version = "3.11"
 strict = true
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Tests are type-checked for real errors, but pytest fixtures/parametrize
+# make full strict-mode annotation coverage low value; relax the
+# annotation-completeness and reexport rules that would otherwise dominate
+# with boilerplate rather than catching bugs.
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+implicit_reexport = true

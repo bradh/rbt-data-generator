@@ -72,14 +72,13 @@ BACKGROUND_PIDS=()
 # Logging Functions
 # =============================================================================
 
-log() {
-    local level="$1"
-    shift
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local message="[$timestamp] [$level] $*"
-    echo "$message" | tee -a "$LOG_FILE"
-}
+# Shared rbt_log implementation (timestamp/PID formatting, colorized output,
+# file tee via rbt_log_init) — see scripts/lib/README.md.
+# shellcheck source=/dev/null
+source "${SCRIPT_DIR}/../../../scripts/lib/logging.sh"
+rbt_log_init "$LOG_FILE"
 
+log() { rbt_log "$@"; }
 log_info() { log "INFO" "$@"; }
 log_warn() { log "WARN" "$@"; }
 log_error() { log "ERROR" "$@"; }

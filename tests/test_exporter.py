@@ -34,7 +34,7 @@ _BASE_LAYER = Layer(
 
 
 def make_layer(**overrides: object) -> Layer:
-    return replace(_BASE_LAYER, **overrides) if overrides else _BASE_LAYER
+    return replace(_BASE_LAYER, **overrides) if overrides else _BASE_LAYER  # type: ignore[arg-type]
 
 
 def test_command_contains_srs_connection_and_table(tmp_path: Path, recorded_run) -> None:
@@ -98,9 +98,7 @@ def test_force_unlinks_cached_fgb_and_reexports(tmp_path: Path, recorded_run) ->
     cached = tmp_path / "water_3857.fgb"
     cached.write_text("stale export")
 
-    result = export_layer_to_fgb(
-        make_layer(), PROJECTION_3857, Settings(), tmp_path, force=True
-    )
+    result = export_layer_to_fgb(make_layer(), PROJECTION_3857, Settings(), tmp_path, force=True)
 
     assert result == cached
     assert len(recorded_run.calls) == 1

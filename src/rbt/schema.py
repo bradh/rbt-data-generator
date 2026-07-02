@@ -32,9 +32,7 @@ def resolve_schema_files(
     if keys:
         for key in keys:
             if key not in registry.schemas:
-                raise KeyError(
-                    f"Unknown schema {key!r} (available: {sorted(registry.schemas)})"
-                )
+                raise KeyError(f"Unknown schema {key!r} (available: {sorted(registry.schemas)})")
             selected[key] = registry.schemas[key]
     if layer_type:
         for schema in registry.schemas_for_type(layer_type):

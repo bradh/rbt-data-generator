@@ -56,9 +56,7 @@ def test_tiles_water_3857_dry_run(tile_repo: Path, recorded_run) -> None:
 
 
 def test_tiles_all_expands_types_and_projections(tile_repo: Path, recorded_run) -> None:
-    result = runner.invoke(
-        app, ["--no-log-file", "tiles", "--all", "--no-tile-join", "--dry-run"]
-    )
+    result = runner.invoke(app, ["--no-log-file", "tiles", "--all", "--no-tile-join", "--dry-run"])
     assert result.exit_code == 0, result.output
 
     joined = [" ".join(cmd) for cmd in recorded_run.commands]

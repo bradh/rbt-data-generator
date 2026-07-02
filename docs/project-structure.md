@@ -19,9 +19,11 @@ rbt-data-generator/
 │   ├── tile-server.json         # TileServer-GL config for the `serve` profile
 │   └── prometheus.yml           # Prometheus scrape config for the `monitoring` profile
 ├── src/rbt/                     # The `rbt` CLI — the ONLY orchestrator
-│   ├── cli.py                   # Typer app: tiles / setup / schema / osm / import / layers / validate / smoke / health
+│   ├── cli.py                   # Thin Typer app assembler: global options + mounts commands/
+│   ├── commands/                # One module per command group (tiles, osm, setup, import, layers, schema, checks)
+│   │   └── tiles.py             # `rbt tiles` — TileRequest normalization shared by native + `--mode bash`
 │   ├── config.py                # Frozen Settings dataclass + load_settings()
-│   ├── layers.py                # layers.yml loader → Layer / LayerRegistry / MvtConfig
+│   ├── layers.py                # layers.yml loader → Layer / LayerRegistry / MvtConfig (+ LayerRegistryError)
 │   ├── paths.py                 # project_root() discovery (RBT_PROJECT_ROOT, then walk up)
 │   ├── logging.py               # Rich console logging + optional file tee
 │   ├── process.py               # run() / run_with_retry() subprocess helpers (dry-run aware)
@@ -29,7 +31,7 @@ rbt-data-generator/
 │   ├── setup_db.py              # CREATE DATABASE / EXTENSIONS bootstrap + `rbt setup` steps
 │   ├── schema.py                # Dispatches schema SQL via psql -v ON_ERROR_STOP=1
 │   ├── checks.py                # rbt validate / smoke / health (native Python)
-│   ├── importers/               # Thin wrappers over the bash leaf importers
+│   ├── importers/                # Thin wrappers over the bash leaf importers
 │   │   └── osm.py               # `rbt osm run|status|stop` — supervises `imposm run`
 │   └── tiles/                   # Tile generation engine
 │       ├── engine.py            # TileEngine — picks the backend per projection
@@ -129,9 +131,13 @@ Two groups of bash survive:
   native Python engine is the default.
 
 The earlier bash orchestrators (`setup/init-database.sh`,
-`production/update-osm.sh`, `tools/*.sh`, the per-type
+`production/update-osm.sh`, the `tools/*.sh` check scripts
+`validate-environment.sh`/`health-check.sh`/`smoke-test.sh`, and the per-type
 `process-*-schemas.sh`) have been **deleted**; their functionality lives in
-`rbt setup`, `rbt osm`, `rbt validate|smoke|health`, and `rbt schema`.
+`rbt setup`, `rbt osm`, `rbt validate|smoke|health`, and `rbt schema`. Only
+*orchestrators* were removed — `tools/overture_building_processing.sh` (a
+standalone leaf utility, not an orchestrator) is intentionally kept; see
+[`tools/README.md`](https://github.com/MJJ203/rbt-data-generator/blob/main/tools/README.md).
 
 ### Tile engine backends
 
@@ -190,9 +196,9 @@ the fastest way to learn what the pipeline actually executes.
 
 1. **`config/layers.yml`** plus `rbt layers list` — learn the vocabulary:
    layers, categories, filters, projections, the `gdal_mvt` datasets.
-2. **`rbt --help`** and [`src/rbt/cli.py`](https://github.com/MJJ203/rbt-data-generator/blob/main/src/rbt/cli.py) — see how the
-   command surface maps options onto engine calls. Try a
-   `rbt tiles --water --projection 3857 --dry-run`.
+2. **`rbt --help`** and [`src/rbt/commands/tiles.py`](https://github.com/MJJ203/rbt-data-generator/blob/main/src/rbt/commands/tiles.py) — see how
+   the command surface maps options onto engine calls via a normalized
+   `TileRequest`. Try a `rbt tiles --water --projection 3857 --dry-run`.
 3. **[`src/rbt/config.py`](https://github.com/MJJ203/rbt-data-generator/blob/main/src/rbt/config.py)** and
    **[`scripts/lib/config.sh`](https://github.com/MJJ203/rbt-data-generator/blob/main/scripts/lib/config.sh)** — the configuration
    resolution chain and the environment handoff to child processes.
