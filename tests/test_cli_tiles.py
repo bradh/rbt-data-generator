@@ -121,6 +121,37 @@ def test_tiles_unknown_layer_errors(tile_repo: Path, recorded_run) -> None:
     assert recorded_run.calls == []
 
 
+def test_bash_mode_rejects_layer_option(tile_repo: Path, recorded_run) -> None:
+    result = runner.invoke(
+        app,
+        ["--no-log-file", "tiles", "--mode", "bash", "--layer", "water", "--dry-run"],
+    )
+    assert result.exit_code != 0
+    assert "--layer" in result.output
+    assert recorded_run.calls == []
+
+
+def test_bash_mode_rejects_force_option(tile_repo: Path, recorded_run) -> None:
+    result = runner.invoke(
+        app,
+        ["--no-log-file", "tiles", "--mode", "bash", "--force", "--water", "--dry-run"],
+    )
+    assert result.exit_code != 0
+    assert "--force" in result.output
+    assert recorded_run.calls == []
+
+
+def test_all_combined_with_category_is_rejected(tile_repo: Path, recorded_run) -> None:
+    result = runner.invoke(
+        app,
+        ["--no-log-file", "tiles", "--all", "--water", "--dry-run"],
+    )
+    assert result.exit_code != 0
+    assert "--all" in result.output
+    # Must not silently fall through to generating every layer.
+    assert recorded_run.calls == []
+
+
 def test_read_only_commands_do_not_create_log_files(fake_repo: Path) -> None:
     logs_dir = fake_repo / "output" / "logs"
 

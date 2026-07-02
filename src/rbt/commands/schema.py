@@ -39,12 +39,20 @@ def schema_run(
     dry_run: bool = typer.Option(False, "--dry-run"),
 ) -> None:
     """Execute schema SQL files via psql (creates/refreshes the rbt.* views)."""
+    run_all = all_ or layer_type is LayerType.all
     selected_keys = list(keys or [])
     selected_type = (
         layer_type.value if layer_type is not None and layer_type is not LayerType.all else None
     )
-    if all_:
+    if run_all:
         selected_keys, selected_type = [], None
+    elif not selected_keys and not selected_type:
+        # Refuse a bare `rbt schema run`: running every schema is a mutating,
+        # maximal action and must be requested explicitly.
+        raise typer.BadParameter(
+            "specify schema key(s), --type <physical|cultural>, or --all; "
+            "a bare `rbt schema run` no longer runs every schema."
+        )
     schema_mod.run_schemas(
         settings_from_ctx(ctx),
         load_registry(),

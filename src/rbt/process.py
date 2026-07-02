@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import subprocess
 import time
@@ -13,6 +14,15 @@ from .logging import get_logger
 
 log = get_logger(__name__)
 
+# Redact libpq/OGR ``password=...`` tokens before anything is logged or put into
+# an exception message. Secrets are normally supplied via PGPASSWORD (env), but
+# this is a defense-in-depth guard for any conninfo that still carries one.
+_SECRET_RE = re.compile(r"(?i)(password=)[^\s'\"]+")
+
+
+def _redact(text: str) -> str:
+    return _SECRET_RE.sub(r"\1***", text)
+
 
 class CommandFailed(RuntimeError):
     def __init__(self, cmd: Sequence[str], returncode: int, stderr: str = "") -> None:
@@ -20,7 +30,7 @@ class CommandFailed(RuntimeError):
         self.returncode = returncode
         self.stderr = stderr
         super().__init__(
-            f"Command failed (exit {returncode}): {shlex.join(self.cmd)}"
+            f"Command failed (exit {returncode}): {_redact(shlex.join(self.cmd))}"
             + (f"\n{stderr.strip()}" if stderr else "")
         )
 
@@ -36,7 +46,7 @@ def run(
     dry_run: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """Run *cmd*, optionally tee'ing output to *log_file*."""
-    rendered = shlex.join(cmd)
+    rendered = _redact(shlex.join(cmd))
 
     if dry_run:
         log.info("[dry-run] %s", rendered)

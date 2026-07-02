@@ -31,6 +31,10 @@ ARG PYTHON_VERSION
 ARG GDAL_VERSION
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Fail piped RUN steps if any stage of the pipe fails (hadolint DL4006). Set in
+# the base stage and inherited by every stage built FROM it.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
@@ -81,11 +85,12 @@ RUN apt-get update \
         zlib1g-dev \
         git \
     && git clone --depth=1 --branch "${TIPPECANOE_REF}" https://github.com/felt/tippecanoe.git /tmp/tippecanoe \
-    && cd /tmp/tippecanoe \
-    && make -j"$(nproc)" \
-    && make install PREFIX=/opt/tippecanoe \
-    && rm -rf /tmp/tippecanoe \
     && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /tmp/tippecanoe
+RUN make -j"$(nproc)" \
+    && make install PREFIX=/opt/tippecanoe \
+    && rm -rf /tmp/tippecanoe
 
 # -----------------------------------------------------------------------------
 # Stage 3: download and verify imposm3
@@ -96,7 +101,7 @@ ARG IMPOSM_VERSION
 ARG IMPOSM_SHA256
 
 RUN set -eux \
-    && wget -O /tmp/imposm.tar.gz \
+    && wget -nv -O /tmp/imposm.tar.gz \
          "https://github.com/omniscale/imposm3/releases/download/v${IMPOSM_VERSION}/imposm-${IMPOSM_VERSION}-linux-x86-64.tar.gz" \
     # SHA256 verification kept soft until the pin ARG is provided at build time
     && if [ -n "${IMPOSM_SHA256:-}" ] && [ "${IMPOSM_SHA256}" != "SKIP" ]; then \
@@ -143,7 +148,14 @@ COPY production/ ./production/
 COPY tools/ ./tools/
 
 RUN find ./setup ./production ./tools ./scripts -name "*.sh" -exec chmod +x {} \; \
-    && mkdir -p output/logs output/tiles cache
+    && mkdir -p output/logs output/tiles cache \
+    && groupadd --system rbt \
+    && useradd --system --gid rbt --home-dir /app --shell /usr/sbin/nologin rbt \
+    && chown -R rbt:rbt /app
+
+# Run as a non-root user. Any host/named volumes mounted for writable paths
+# (output/, cache/, and the OSM /mnt/* data dirs) must be writable by this uid.
+USER rbt
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD rbt health || exit 1

@@ -24,7 +24,13 @@ def resolve_schema_files(
     keys: list[str] | None = None,
     layer_type: str | None = None,
 ) -> list[SchemaFile]:
-    """Select schema units by key and/or layer type (both empty = all)."""
+    """Select schema units by key and/or layer type.
+
+    *keys* and *layer_type* combine as a **union** (OR), not an intersection:
+    passing both runs every unit matching either. Passing neither selects all
+    (used by ``rbt setup`` / ``rbt smoke``; the ``rbt schema run`` CLI requires
+    an explicit selection instead).
+    """
     if not registry.schemas:
         raise KeyError("No 'schemas:' section found in config/layers.yml")
 

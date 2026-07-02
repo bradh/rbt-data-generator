@@ -5,8 +5,12 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
+import rbt.tiles.exporter as exporter_mod
 from rbt.config import Settings
 from rbt.layers import Layer, OgrOptions, Projection, TippecanoeOptions
+from rbt.process import CommandFailed
 from rbt.tiles.exporter import export_layer_to_fgb
 
 PROJECTION_3857 = Projection(
@@ -104,6 +108,59 @@ def test_force_unlinks_cached_fgb_and_reexports(tmp_path: Path, recorded_run) ->
     assert len(recorded_run.calls) == 1
     # The stale file was unlinked before dispatch (the recorder never recreates it).
     assert not cached.exists()
+
+
+def test_exports_via_temp_then_renames(tmp_path: Path, monkeypatch) -> None:
+    final = tmp_path / "water_3857.fgb"
+    partial = tmp_path / "water_3857.partial.fgb"
+
+    def fake_run(cmd, **kwargs):
+        # ogr2ogr writes to the temp path, which must not be the final path.
+        out = Path(cmd[cmd.index("-t_srs") + 2])
+        assert out == partial
+        out.write_text("real export")
+
+    monkeypatch.setattr(exporter_mod, "run_with_retry", fake_run)
+
+    result = export_layer_to_fgb(make_layer(), PROJECTION_3857, Settings(), tmp_path)
+
+    assert result == final
+    assert final.read_text() == "real export"
+    assert not partial.exists()
+
+
+def test_failed_export_removes_partial_and_leaves_no_cache(tmp_path: Path, monkeypatch) -> None:
+    final = tmp_path / "water_3857.fgb"
+    partial = tmp_path / "water_3857.partial.fgb"
+
+    def boom(cmd, **kwargs):
+        # A retry attempt wrote a partial file before failing.
+        partial.write_text("partial")
+        raise CommandFailed(list(cmd), 1)
+
+    monkeypatch.setattr(exporter_mod, "run_with_retry", boom)
+
+    with pytest.raises(CommandFailed):
+        export_layer_to_fgb(make_layer(), PROJECTION_3857, Settings(), tmp_path)
+
+    # No partial left behind for a later run to mistake for a valid cache hit.
+    assert not partial.exists()
+    assert not final.exists()
+
+
+def test_force_dry_run_keeps_cached_fgb(tmp_path: Path, recorded_run) -> None:
+    cached = tmp_path / "water_3857.fgb"
+    cached.write_text("stale export")
+
+    result = export_layer_to_fgb(
+        make_layer(), PROJECTION_3857, Settings(), tmp_path, force=True, dry_run=True
+    )
+
+    assert result == cached
+    # Dry run must not delete the cached export nor dispatch a re-export.
+    assert cached.exists()
+    assert cached.read_text() == "stale export"
+    assert recorded_run.calls == []
 
 
 def test_retry_settings_threaded_to_run_with_retry(tmp_path: Path, recorded_run) -> None:

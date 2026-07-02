@@ -1018,9 +1018,10 @@ main() {
     log_success "Completed jobs: ${#COMPLETED_JOBS[@]}"
     
     if [[ ${#FAILED_JOBS[@]} -gt 0 ]]; then
-        log_warning "Failed jobs: ${#FAILED_JOBS[@]} - ${FAILED_JOBS[*]}"
+        log_error "Database setup completed with ${#FAILED_JOBS[@]} failed job(s): ${FAILED_JOBS[*]}"
+        return 1
     fi
-    
+
     log_success "Database setup finished successfully!"
 }
 

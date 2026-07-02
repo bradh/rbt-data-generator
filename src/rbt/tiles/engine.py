@@ -111,6 +111,7 @@ class TileEngine:
                 continue
             results.append(self.generate_single(layer, job.projection, job.output_dir))
 
+        merged_written = False
         if job.tile_join and len(results) > 1:
             merged = job.output_dir / f"{job.layer_type}_{job.projection.code}.mbtiles"
             join_layers(
@@ -119,14 +120,16 @@ class TileEngine:
                 dry_run=self.dry_run,
                 log_file=job.output_dir / f"merge_{job.projection.code}.log",
             )
+            merged_written = True
             if job.add_btis and not self.dry_run:
                 apply_btis_metadata(merged, job.projection, self.registry.btp_schema_version)
-        elif job.add_btis and len(results) == 1 and not self.dry_run:
-            apply_btis_metadata(
-                results[0].output,
-                job.projection,
-                self.registry.btp_schema_version,
-            )
+
+        # When no merge happened (single layer, or --no-tile-join with several
+        # layers), BTIS metadata must land on each per-layer output — the
+        # multi-layer/no-join combination was previously skipped entirely.
+        if job.add_btis and not self.dry_run and not merged_written:
+            for result in results:
+                apply_btis_metadata(result.output, job.projection, self.registry.btp_schema_version)
 
         return results
 

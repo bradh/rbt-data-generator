@@ -34,6 +34,7 @@ from .commands.setup import setup_app
 from .commands.tiles import tiles_app
 from .config import load_settings
 from .logging import configure_logging, get_logger
+from .process import CommandFailed
 
 console = Console()
 err_console = Console(stderr=True)
@@ -73,7 +74,7 @@ def _main(
     ctx: typer.Context,
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose logging."),
     debug: bool = typer.Option(False, "--debug", help="Debug-level logging."),
-    log_file: Path = typer.Option(
+    log_file: Path | None = typer.Option(
         None,
         "--log-file",
         help="Duplicate logs to this file (defaults to $SHARED_LOG_DIR/rbt_<ts>.log for mutating commands).",
@@ -124,6 +125,11 @@ click_app = typer.main.get_command(app)
 def main() -> None:  # pragma: no cover - CLI entry
     try:
         app()
+    except CommandFailed as exc:
+        # Preserve the underlying process exit code instead of collapsing to 1.
+        err_console.print(f"[red]error:[/red] {exc}")
+        get_logger("rbt").debug("command failed in CLI", exc_info=exc)
+        sys.exit(exc.returncode or 1)
     except Exception as exc:  # noqa: BLE001 - top-level CLI safety net
         err_console.print(f"[red]error:[/red] {type(exc).__name__}: {exc}")
         get_logger("rbt").debug("unhandled exception in CLI", exc_info=exc)

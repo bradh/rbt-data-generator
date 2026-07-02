@@ -58,10 +58,11 @@ readonly DIFF_START_SEQ="${DIFF_START_SEQ:-713}"
 readonly DIFF_END_SEQ="${DIFF_END_SEQ:-730}"
 readonly CLEANUP_ON_EXIT="${CLEANUP_ON_EXIT:-true}"
 readonly VALIDATE_DOWNLOADS="${VALIDATE_DOWNLOADS:-true}"
-# Minimum acceptable PBF size in MB for the import-stage sanity check. The
-# default admits regional extracts; raise it (e.g. 50000) to also catch
-# truncated planet downloads.
-readonly MIN_PBF_SIZE_MB="${OSM_MIN_PBF_SIZE_MB:-10}"
+# Minimum acceptable PBF size in MB for the sanity check. Defaults to a
+# planet-sized floor so a truncated multi-hour planet download is caught before
+# it silently proceeds into imposm. Override with OSM_MIN_PBF_SIZE_MB (e.g. 10)
+# when importing a small regional extract.
+readonly MIN_PBF_SIZE_MB="${OSM_MIN_PBF_SIZE_MB:-50000}"
 
 # Global variables
 PID_FILE="/tmp/osm_import.pid"
@@ -249,7 +250,7 @@ download_planet_file() {
         --http-accept-gzip=true
         --user-agent="OpenMapTiles download-osm 7.1.1 (https://github.com/openmaptiles/openmaptiles-tools)"
         --dir="$DATA_DIR"
-        --out=planet-latest.osm.pbf
+        --out=planet-latest-v2.osm.pbf
         --auto-file-renaming=false
         --continue=true
         --max-tries=3
@@ -570,6 +571,17 @@ show_usage() {
 # =============================================================================
 # Individual Process Functions
 # =============================================================================
+
+# Placeholder health-check hook. Every run_* path calls this; it was previously
+# undefined, so under `set -e` the reference aborted every command but --help.
+# Container liveness/readiness is handled by the orchestrator (compose/k8s
+# healthchecks) rather than an in-script server, so this is intentionally a
+# no-op that simply records the configured port and returns success. Replace the
+# body with a real listener if in-process health serving is ever required.
+start_health_check_server() {
+    log_info "Health check hook (no-op); orchestrator owns liveness on port ${OSM_HEALTH_CHECK_PORT:-${HEALTH_CHECK_PORT:-8080}}"
+    return 0
+}
 
 run_download_planet() {
     log_info "Running planet download process only..."

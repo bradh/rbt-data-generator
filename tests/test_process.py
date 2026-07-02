@@ -35,6 +35,25 @@ def test_check_false_passes_through_nonzero_returncode() -> None:
     assert result.returncode != 0
 
 
+def test_password_is_redacted_in_log_file(tmp_path: Path) -> None:
+    log_file = tmp_path / "run.log"
+    # `true` ignores its args and prints nothing, so the only place the secret
+    # could appear is the command header that process.run writes.
+    run(["true", "PG:dbname=rbt password=s3cr3t user=rbt"], log_file=log_file)
+    content = log_file.read_text(encoding="utf-8")
+    assert "password=***" in content
+    assert "s3cr3t" not in content
+
+
+def test_password_is_redacted_in_command_failed_message() -> None:
+    cmd = ["sh", "-c", "exit 3", "password=s3cr3t"]
+    with pytest.raises(CommandFailed) as excinfo:
+        run(cmd)
+    message = str(excinfo.value)
+    assert "password=***" in message
+    assert "s3cr3t" not in message
+
+
 def test_log_file_tee_creates_parents_and_writes_header(tmp_path: Path) -> None:
     log_file = tmp_path / "nested" / "dir" / "run.log"
     run(["echo", "hello-tee"], log_file=log_file)

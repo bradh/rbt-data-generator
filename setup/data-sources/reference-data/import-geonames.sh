@@ -59,7 +59,7 @@ readonly VERBOSE="${SCRIPT_VERBOSE:-false}"
 readonly CLEAN_TEMP_FILES="${SCRIPT_CLEAN_TEMP_FILES:-false}"
 
 # Database connection (built once)
-readonly PG_CONNECTION="host=${PG_HOST} port=5432 dbname=rbt user=${PG_USR} password=${PG_PASS}"
+readonly PG_CONNECTION="host=${DATABASE_HOST} port=${DATABASE_PORT} dbname=${DATABASE_NAME} user=${DATABASE_USER} password=${DATABASE_PASSWORD}"
 
 # Shared rbt_log implementation (timestamp/PID formatting, colorized output).
 # shellcheck source=/dev/null
@@ -860,7 +860,7 @@ ingest_geonames_generic() {
     ogr2ogr -progress \
         -f "PostgreSQL" \
         --config PG_USE_COPY YES \
-        "PG:dbname=rbt host=${PG_HOST} user=${PG_USR} password=${PG_PASS}" \
+        "PG:dbname=${DATABASE_NAME} host=${DATABASE_HOST} port=${DATABASE_PORT} user=${DATABASE_USER} password=${DATABASE_PASSWORD}" \
          -a_srs EPSG:4326 \
         -nln "geonames.${table_name}" \
         -lco GEOMETRY_NAME=geometry \
@@ -1079,9 +1079,10 @@ main() {
     log_success "Completed jobs: ${#COMPLETED_JOBS[@]}"
     
     if [[ ${#FAILED_JOBS[@]} -gt 0 ]]; then
-        log_warning "Failed jobs: ${#FAILED_JOBS[@]} - ${FAILED_JOBS[*]}"
+        log_error "GeoNames ingestion completed with ${#FAILED_JOBS[@]} failed job(s): ${FAILED_JOBS[*]}"
+        return 1
     fi
-    
+
     log_success "GeoNames data ingestion finished successfully!"
 }
 

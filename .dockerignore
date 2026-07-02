@@ -6,11 +6,12 @@
 .DS_Store
 **/.DS_Store
 
-LICENSE
+# NOTE: README.md and LICENSE are intentionally NOT ignored — the Python build
+# stage copies them (pyproject.toml declares `readme` and `license`), so a build
+# fails without them in the context.
 CHANGELOG.md
 CONTRIBUTING.md
 SECURITY.md
-README.md
 mkdocs.yml
 requirements-docs.txt
 env.example

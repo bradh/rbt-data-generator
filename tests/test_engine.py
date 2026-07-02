@@ -139,6 +139,31 @@ def test_generate_single_result_skips_tile_join(fake_repo: Path, recorded_run, m
     assert btis_calls == [(results[0].output, projection, "9.9.9")]
 
 
+def test_generate_no_tile_join_multi_layer_applies_btis_per_layer(
+    fake_repo: Path, recorded_run, monkeypatch
+) -> None:
+    patch_tippecanoe_to_touch_output(recorded_run, monkeypatch)
+    btis_calls = patch_btis_recorder(monkeypatch)
+
+    engine = make_engine(fake_repo)
+    projection = engine.registry.projections["3857"]
+    output_dir = engine.output_dir_for("physical", projection)
+    job = TileJob(
+        layer_type="physical",
+        projection=projection,
+        layers=engine.registry.layers_for_type("physical"),
+        output_dir=output_dir,
+        tile_join=False,
+    )
+
+    results = engine.generate(job)
+
+    assert len(results) == 2
+    # No merge happened, so BTIS must land on each per-layer output, not be skipped.
+    assert [call[0] for call in btis_calls] == [r.output for r in results]
+    assert "tile-join" not in [cmd[0] for cmd in recorded_run.commands]
+
+
 def test_generate_skips_layer_not_configured_for_projection(
     fake_repo: Path, recorded_run, monkeypatch
 ) -> None:
@@ -266,6 +291,28 @@ def test_generate_4326_partial_selection_narrows_categories(
     engine.generate(job)
 
     assert seen["categories"] == ["water"]
+
+
+def test_generate_layer_4326_uses_gdal_mvt(fake_repo: Path, recorded_run, monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    def fake_generate_mvt_dataset(layer_type, settings, registry, output_root, **kwargs):
+        seen["layer_type"] = layer_type
+        seen["categories"] = kwargs.get("categories")
+        return output_root / "physical_tiles"
+
+    monkeypatch.setattr(engine_mod, "generate_mvt_dataset", fake_generate_mvt_dataset)
+    settings = load_settings(overrides={"TILE_TEMP_DIR": str(fake_repo / "output" / "tile-temp")})
+
+    result = engine_mod.generate_layer("water", "4326", settings)
+
+    assert result.kind == "directory"
+    assert result.layer is None
+    assert seen["layer_type"] == "physical"
+    # The single-layer convenience path narrows the 4326 dataset to that category.
+    assert seen["categories"] == ["water"]
+    # No tippecanoe/ogr2ogr/tile-join on the 4326 path.
+    assert recorded_run.calls == []
 
 
 def test_tile_result_mbtiles_aliases_output() -> None:

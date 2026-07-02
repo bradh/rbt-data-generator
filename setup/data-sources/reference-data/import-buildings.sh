@@ -60,7 +60,7 @@ readonly VERBOSE="${SCRIPT_VERBOSE:-false}"
 readonly CLEAN_TEMP_FILES="${SCRIPT_CLEAN_TEMP_FILES:-false}"
 
 # Database connection (built once)
-readonly PG_CONNECTION="host=${PG_HOST} port=5432 dbname=rbt user=${PG_USR} password=${PG_PASS}"
+readonly PG_CONNECTION="host=${DATABASE_HOST} port=${DATABASE_PORT} dbname=${DATABASE_NAME} user=${DATABASE_USER} password=${DATABASE_PASSWORD}"
 
 # Shared rbt_log implementation (timestamp/PID formatting, colorized output).
 # shellcheck source=/dev/null
@@ -247,7 +247,7 @@ create_database_schemas() {
 # Build PostgreSQL connection string for ogr2ogr
 build_pg_connection() {
     local schema="${1:-public}"
-    echo "PG:host=${PG_HOST} port=5432 dbname=rbt password=${PG_PASS} active_schema=${schema} user=${PG_USR}"
+    echo "PG:host=${DATABASE_HOST} port=${DATABASE_PORT} dbname=${DATABASE_NAME} password=${DATABASE_PASSWORD} active_schema=${schema} user=${DATABASE_USER}"
 }
 
 # Execute SQL command with error handling
@@ -373,7 +373,7 @@ ingest_overture_buildings_impl() {
         if ! ogr2ogr -progress \
             -f "PostgreSQL" \
             --config PG_USE_COPY YES \
-            "PG:dbname=rbt host=${PG_HOST} user=${PG_USR} password=${PG_PASS}" \
+            "PG:dbname=${DATABASE_NAME} host=${DATABASE_HOST} port=${DATABASE_PORT} user=${DATABASE_USER} password=${DATABASE_PASSWORD}" \
             -nln overture.building \
             -lco GEOMETRY_NAME=geometry \
             -lco DIM=2 \
@@ -401,7 +401,7 @@ ingest_overture_buildings_impl() {
         if ogr2ogr -progress \
             -f "PostgreSQL" \
             --config PG_USE_COPY YES \
-            "PG:dbname=rbt host=${PG_HOST} user=${PG_USR} password=${PG_PASS}" \
+            "PG:dbname=${DATABASE_NAME} host=${DATABASE_HOST} port=${DATABASE_PORT} user=${DATABASE_USER} password=${DATABASE_PASSWORD}" \
             -nln overture.buildingpart \
             -lco GEOMETRY_NAME=geometry \
             -lco DIM=2 \

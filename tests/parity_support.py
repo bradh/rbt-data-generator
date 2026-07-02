@@ -27,6 +27,9 @@ GENERATE_TILES = REPO_ROOT / "production" / "generate-tiles.sh"
 PHYSICAL_GENERATOR = (
     REPO_ROOT / "production" / "tile-generation" / "physical" / "generate-physical-3857-3395.sh"
 )
+CULTURAL_GENERATOR = (
+    REPO_ROOT / "production" / "tile-generation" / "cultural" / "generate-cultural-3857-3395.sh"
+)
 
 # Connection env captured at import time: the autouse ``_clean_env_and_caches``
 # fixture scrubs PG*/DATABASE_* from os.environ before each test, but the bash
@@ -80,6 +83,10 @@ def database_reachable() -> bool:
 # into the option set as a single "flag value" token.
 _VALUE_FLAGS = frozenset({"-t", "-o", "-Z", "-z", "-n", "-l", "-s", "-j", "-T", "-M", "-r"})
 _OPTION_VALUE_FLAGS = frozenset({"-M", "-r"})
+# Long options that take a separate-token value in some generators (e.g. bash's
+# `--extra-detail 13`) but the attached form elsewhere (`--extra-detail=13`).
+# Normalize the space form to the attached form so both compare equal.
+_LONG_VALUE_FLAGS = frozenset({"--extra-detail"})
 
 
 @dataclass(frozen=True)
@@ -117,6 +124,10 @@ def parse_tippecanoe_argv(argv: list[str]) -> TippecanoeInvocation:
                 options.add(f"{token} {value}")
             else:
                 values[token] = value
+        elif token in _LONG_VALUE_FLAGS:
+            # Normalize `--extra-detail 13` to the attached `--extra-detail=13` form.
+            options.add(f"{token}={argv[i + 1]}")
+            i += 2
         elif token.startswith("-"):
             options.add(token)
             i += 1
@@ -154,21 +165,30 @@ def parse_tippecanoe_argv(argv: list[str]) -> TippecanoeInvocation:
 _CAPTURE_SCRIPT = """\
 set -eo pipefail
 cd "$RBT_PARITY_REPO_ROOT"
-source production/tile-generation/physical/generate-physical-3857-3395.sh
+# shellcheck disable=SC1090
+source "$RBT_PARITY_GENERATOR"
 PROJECTION_CODE="$RBT_PARITY_PROJECTION"
 configure_projection
 OUTPUT_DIR="$RBT_PARITY_WORK_DIR/out"
 TEMP_DIR="$RBT_PARITY_WORK_DIR/tmp"
 mkdir -p "$OUTPUT_DIR"
-# A pre-existing NDJSON short-circuits the ogr2ogr/tippecanoe-json-tool steps,
-# so no database or GDAL is needed to reach the tippecanoe call.
-touch "$OUTPUT_DIR/water_${PROJECTION_CODE}.ndjson"
+# A pre-existing prepared input (NDJSON for water, FlatGeoBuf for building)
+# short-circuits the ogr2ogr/json steps, so no database or GDAL is needed to
+# reach the tippecanoe call.
+touch "$OUTPUT_DIR/$RBT_PARITY_PREP_FILE"
 tippecanoe() { printf '%s\\n' tippecanoe "$@" > "$RBT_PARITY_CAPTURE_FILE"; }
-generate_water
+"$RBT_PARITY_GENERATE_FN"
 """
 
 
-def capture_bash_water_argv(tmp_path: Path, projection_code: str) -> list[str]:
+def _capture_bash_argv(
+    tmp_path: Path,
+    projection_code: str,
+    *,
+    generator: Path,
+    generate_fn: str,
+    prep_file: str,
+) -> list[str]:
     capture_file = tmp_path / "tippecanoe-argv.txt"
     env = {
         **os.environ,
@@ -177,6 +197,9 @@ def capture_bash_water_argv(tmp_path: Path, projection_code: str) -> list[str]:
         "RBT_PARITY_PROJECTION": projection_code,
         "RBT_PARITY_WORK_DIR": str(tmp_path),
         "RBT_PARITY_CAPTURE_FILE": str(capture_file),
+        "RBT_PARITY_GENERATOR": str(generator),
+        "RBT_PARITY_GENERATE_FN": generate_fn,
+        "RBT_PARITY_PREP_FILE": prep_file,
     }
     result = subprocess.run(
         ["bash", "-c", _CAPTURE_SCRIPT],
@@ -192,9 +215,31 @@ def capture_bash_water_argv(tmp_path: Path, projection_code: str) -> list[str]:
     return capture_file.read_text(encoding="utf-8").splitlines()
 
 
-def native_water_invocation(tmp_path: Path, projection_code: str) -> TippecanoeInvocation:
+def capture_bash_water_argv(tmp_path: Path, projection_code: str) -> list[str]:
+    return _capture_bash_argv(
+        tmp_path,
+        projection_code,
+        generator=PHYSICAL_GENERATOR,
+        generate_fn="generate_water",
+        prep_file=f"water_{projection_code}.ndjson",
+    )
+
+
+def capture_bash_building_argv(tmp_path: Path, projection_code: str) -> list[str]:
+    return _capture_bash_argv(
+        tmp_path,
+        projection_code,
+        generator=CULTURAL_GENERATOR,
+        generate_fn="generate_building",
+        prep_file=f"building_{projection_code}.fgb",
+    )
+
+
+def native_layer_invocation(
+    tmp_path: Path, projection_code: str, layer_key: str
+) -> TippecanoeInvocation:
     reg = registry()
-    layer = reg.layer("water")
+    layer = reg.layer(layer_key)
     projection = reg.projections[projection_code]
     basename = layer.output_basename(projection.code)
     cmd = build_tippecanoe_command(
@@ -205,6 +250,10 @@ def native_water_invocation(tmp_path: Path, projection_code: str) -> TippecanoeI
         registry=reg,
     )
     return parse_tippecanoe_argv(cmd)
+
+
+def native_water_invocation(tmp_path: Path, projection_code: str) -> TippecanoeInvocation:
+    return native_layer_invocation(tmp_path, projection_code, "water")
 
 
 # ---------------------------------------------------------------------------

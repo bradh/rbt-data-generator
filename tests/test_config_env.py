@@ -51,6 +51,20 @@ def test_inline_comments_are_stripped(fake_repo: Path) -> None:
     assert load_settings().database_port == 6543
 
 
+def test_quoted_value_preserves_hash(fake_repo: Path) -> None:
+    # A '#' inside quotes is part of the value, not the start of a comment.
+    _write_conf(fake_repo, "DATABASE_PASSWORD='p@ss#word'\n")
+    assert load_settings().database_password == "p@ss#word"
+
+
+def test_env_legacy_alias_beats_conf_canonical(fake_repo: Path, monkeypatch) -> None:
+    # Documented precedence is env > conf, and it must hold across aliases:
+    # PG_HOST (legacy) in the environment beats DATABASE_HOST (canonical) in conf.
+    _write_conf(fake_repo, "DATABASE_HOST=confhost\n")
+    monkeypatch.setenv("PG_HOST", "envlegacy")
+    assert load_settings().database_host == "envlegacy"
+
+
 def test_precedence_overrides_env_conf_default(fake_repo: Path, monkeypatch) -> None:
     _write_conf(fake_repo, "DATABASE_HOST=confhost\n")
     # conf beats the built-in default ("localhost").

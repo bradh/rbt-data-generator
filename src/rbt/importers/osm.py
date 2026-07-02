@@ -121,7 +121,11 @@ def run_updates(settings: Settings, *, dry_run: bool = False) -> None:
         if process.stdout is not None:
             process.stdout.close()
 
-    if stopping:
+    # A negative return code means the child was killed by a signal. Terminating
+    # via SIGTERM/SIGINT is a clean stop whether it came from this supervisor's
+    # own handler (`stopping`) or directly from `rbt osm stop`, which signals the
+    # child recorded in the pidfile. Only an unexpected non-zero exit is a failure.
+    if stopping or returncode in (-signal.SIGTERM, -signal.SIGINT):
         log.info("OSM updates stopped (exit %d)", returncode)
         return
     if returncode != 0:

@@ -9,7 +9,22 @@ correct; this module tests the parser itself directly.
 
 from __future__ import annotations
 
-from tests.parity_support import parse_tippecanoe_argv
+from rbt.commands.tiles import CULTURAL_CATEGORY_FLAGS, PHYSICAL_CATEGORY_FLAGS
+from tests.parity_support import parse_tippecanoe_argv, registry
+
+
+def test_category_flag_tuples_match_live_registry() -> None:
+    """The hardcoded ``rbt tiles`` category flags must equal the categories in
+    ``config/layers.yml``.
+
+    The bash guardrail only compares these tuples against the bash script, so a
+    category added straight to the YAML (without updating the Python constants)
+    would slip through. Cross-checking against the live registry closes that gap:
+    the tuples and the registry categories must stay in exact lockstep.
+    """
+    reg = registry()
+    assert set(PHYSICAL_CATEGORY_FLAGS) == set(reg.categories_for("physical"))
+    assert set(CULTURAL_CATEGORY_FLAGS) == set(reg.categories_for("cultural"))
 
 
 def test_parses_flags_zooms_and_positional_input() -> None:

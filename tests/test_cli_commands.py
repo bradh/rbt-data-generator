@@ -134,6 +134,32 @@ def test_cli_schema_run_dispatches_psql(fake_repo: Path, recorded_run) -> None:
     assert call["cmd"] == ["psql", "-v", "ON_ERROR_STOP=1", "-f", "physical-core.sql"]
 
 
+def test_cli_schema_run_bare_requires_explicit_selection(fake_repo: Path, recorded_run) -> None:
+    result = runner.invoke(app, ["--no-log-file", "schema", "run"])
+    assert result.exit_code != 0
+    assert "--all" in result.output
+    # A bare `schema run` must not silently execute every schema.
+    assert recorded_run.calls == []
+
+
+def test_cli_schema_run_all_dispatches_every_schema(fake_repo: Path, recorded_run) -> None:
+    result = runner.invoke(app, ["--no-log-file", "schema", "run", "--all"])
+    assert result.exit_code == 0, result.output
+    assert {call["cmd"][-1] for call in recorded_run.calls} == {
+        "physical-core.sql",
+        "cultural-core.sql",
+    }
+
+
+def test_cli_setup_all_with_step_flag_is_rejected(fake_repo: Path, recorded_run) -> None:
+    result = runner.invoke(
+        app, ["--no-log-file", "setup", "--all", "--setup-database", "--dry-run"]
+    )
+    assert result.exit_code != 0
+    assert "--all" in result.output
+    assert recorded_run.calls == []
+
+
 # ---------------------------------------------------------------------------
 # rbt tiles --mode bash
 # ---------------------------------------------------------------------------

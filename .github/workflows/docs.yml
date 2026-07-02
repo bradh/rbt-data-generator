@@ -9,6 +9,11 @@ on:
       - "mkdocs.yml"
       - "requirements-docs.txt"
       - ".github/workflows/docs.yml"
+      # `mkdocs build --strict` imports rbt.cli and regenerates docs/cli.md, so
+      # CLI/packaging changes can break the docs build even with no docs edit.
+      - "src/**"
+      - "pyproject.toml"
+      - "uv.lock"
 
 permissions:
   contents: read

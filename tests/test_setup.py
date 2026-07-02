@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import psycopg
 import pytest
@@ -151,3 +152,67 @@ def test_bootstrap_dry_run_never_connects(fake_repo: Path, monkeypatch: pytest.M
 
     monkeypatch.setattr(psycopg, "connect", _no_connect)
     setup_db.bootstrap(load_settings(), dry_run=True)
+
+
+class _RecordingCursor:
+    def __init__(self, result: object) -> None:
+        self._result = result
+
+    def fetchone(self) -> object:
+        return self._result
+
+
+class _RecordingConnection:
+    """Fake psycopg connection that records executed statements as SQL text."""
+
+    def __init__(self, executed: list[str], *, db_exists: bool) -> None:
+        self._executed = executed
+        self._db_exists = db_exists
+
+    def __enter__(self) -> _RecordingConnection:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+    def execute(self, query: Any, params: Any = None) -> _RecordingCursor:
+        text = query if isinstance(query, str) else query.as_string(None)
+        self._executed.append(text)
+        if isinstance(query, str) and "pg_database" in query:
+            return _RecordingCursor((1,) if self._db_exists else None)
+        return _RecordingCursor((1,))
+
+
+def test_bootstrap_creates_database_and_extensions(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executed: list[str] = []
+    monkeypatch.setattr(
+        psycopg, "connect", lambda *a, **k: _RecordingConnection(executed, db_exists=False)
+    )
+    settings = load_settings()
+
+    setup_db.bootstrap(settings)
+
+    assert any("pg_database" in stmt for stmt in executed)
+    assert any("CREATE DATABASE" in stmt for stmt in executed)
+    ext_stmts = [stmt for stmt in executed if "CREATE EXTENSION" in stmt]
+    assert len(ext_stmts) == len(settings.database_extensions)
+    for extension in settings.database_extensions:
+        assert any(extension in stmt for stmt in ext_stmts)
+
+
+def test_bootstrap_skips_create_when_database_exists(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executed: list[str] = []
+    monkeypatch.setattr(
+        psycopg, "connect", lambda *a, **k: _RecordingConnection(executed, db_exists=True)
+    )
+
+    setup_db.bootstrap(load_settings())
+
+    assert any("pg_database" in stmt for stmt in executed)
+    # Database already present, so no CREATE DATABASE, but extensions are ensured.
+    assert not any("CREATE DATABASE" in stmt for stmt in executed)
+    assert any("CREATE EXTENSION" in stmt for stmt in executed)

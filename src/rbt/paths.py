@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from functools import lru_cache
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=1)
@@ -30,7 +33,17 @@ def project_root() -> Path:
         if (parent / "config" / "rbt.conf").is_file():
             return parent
 
-    return here.parent.parent.parent
+    # Fallback for an installed package with no discoverable config/rbt.conf and
+    # no RBT_PROJECT_ROOT: guess the tree two levels above the package. This is
+    # correct in-tree (src/rbt -> repo root) but wrong for a pip-installed wheel,
+    # so warn and rely on RBT_PROJECT_ROOT / a real config being provided.
+    fallback = here.parent.parent.parent
+    log.warning(
+        "could not locate config/rbt.conf; falling back to %s. "
+        "Set RBT_PROJECT_ROOT to the project root to silence this.",
+        fallback,
+    )
+    return fallback
 
 
 def config_dir() -> Path:

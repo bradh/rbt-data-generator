@@ -33,16 +33,23 @@ def setup_entry(
     if ctx.invoked_subcommand is not None:
         return
 
-    if all_ or not any(
-        (
-            setup_database,
-            import_osm_data,
-            import_reference_data,
-            import_geonames,
-            import_buildings,
-            process_schemas,
+    step_flags = (
+        setup_database,
+        import_osm_data,
+        import_reference_data,
+        import_geonames,
+        import_buildings,
+        process_schemas,
+    )
+    if all_ and any(step_flags):
+        # --all already runs every step; combining it with individual step flags
+        # is contradictory (the step flags were previously silently ignored).
+        raise typer.BadParameter(
+            "--all runs every step; do not combine it with individual "
+            "--setup-database / --import-* / --process-schemas flags."
         )
-    ):
+
+    if all_ or not any(step_flags):
         steps = setup_db.SetupSteps.all()
     else:
         steps = setup_db.SetupSteps(

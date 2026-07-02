@@ -10,11 +10,11 @@ import threading
 import time
 from pathlib import Path
 
+import psycopg
 import pytest
 
 from rbt.config import Settings, load_settings
 from rbt.importers import osm as osm_mod
-from rbt.process import CommandFailed
 
 
 def _pidfile(settings: Settings) -> Path:
@@ -83,6 +83,49 @@ def test_stop_updates_returns_1_when_idle(fake_repo: Path) -> None:
     assert osm_mod.stop_updates(load_settings()) == 1
 
 
+class _StatusCursor:
+    def __init__(self, row: object) -> None:
+        self._row = row
+
+    def fetchone(self) -> object:
+        return self._row
+
+
+class _StatusConnection:
+    def __init__(self, row: object) -> None:
+        self._row = row
+
+    def __enter__(self) -> _StatusConnection:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        return None
+
+    def execute(self, *args: object, **kwargs: object) -> _StatusCursor:
+        return _StatusCursor(self._row)
+
+
+def test_update_status_running_reports_last_update(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(osm_mod, "_read_pid", lambda settings: 4321)
+    monkeypatch.setattr(
+        psycopg, "connect", lambda *a, **k: _StatusConnection(("2026-07-02T00:00:00",))
+    )
+
+    # A live supervisor pid means status 0 (running).
+    assert osm_mod.update_status(load_settings()) == 0
+
+
+def test_update_status_not_running_returns_1(
+    fake_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(osm_mod, "_read_pid", lambda settings: None)
+    monkeypatch.setattr(psycopg, "connect", lambda *a, **k: _StatusConnection(None))
+
+    assert osm_mod.update_status(load_settings()) == 1
+
+
 # ---------------------------------------------------------------------------
 # full signal path with a real child process
 # ---------------------------------------------------------------------------
@@ -147,12 +190,7 @@ def test_stop_updates_terminates_running_supervisor(
     assert not worker.is_alive(), "supervisor did not exit after stop_updates"
     assert not pidfile.exists(), "pidfile was not cleaned up"
 
-    # Current behaviour: the pidfile records the *child* imposm pid, so
-    # `rbt osm stop` SIGTERMs the child directly. The supervisor never sees a
-    # signal itself ("stopping" stays False) and reports the -SIGTERM child
-    # exit as CommandFailed rather than a clean stop. Documented as a
-    # suspected bug; revisit this assertion if run_updates/stop_updates change.
-    assert len(outcome) == 1
-    failure = outcome[0]
-    assert isinstance(failure, CommandFailed)
-    assert failure.returncode == -signal.SIGTERM
+    # `rbt osm stop` SIGTERMs the child recorded in the pidfile. run_updates
+    # treats a SIGTERM/SIGINT child exit as a clean stop (not CommandFailed),
+    # so the supervisor returns normally.
+    assert outcome == [None]

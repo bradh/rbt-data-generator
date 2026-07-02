@@ -129,6 +129,42 @@ def _bash_flag_name(category: str) -> str:
     return category.replace("_", "-")
 
 
+def _selected_categories(request: TileRequest) -> list[str]:
+    """Category flag names the user explicitly enabled (both layer types)."""
+    return [
+        cat
+        for cat, enabled in {**request.cultural_flags, **request.physical_flags}.items()
+        if enabled
+    ]
+
+
+def _validate_request(request: TileRequest) -> None:
+    """Reject contradictory / silently-dropped flag combinations up front."""
+    selected = _selected_categories(request)
+
+    # --all means "every layer in every projection"; combining it with a
+    # narrowing flag is contradictory and previously generated everything anyway.
+    if request.all_ and (selected or request.layer_keys):
+        raise typer.BadParameter(
+            "--all cannot be combined with category flags (e.g. --water) or "
+            "--layer; use one or the other."
+        )
+
+    # The deprecated bash generator has no --force/--layer equivalent, so
+    # forwarding is impossible; fail loudly instead of silently ignoring them.
+    if request.mode is Mode.bash:
+        dropped = [
+            name
+            for name, used in (("--force", request.force), ("--layer", bool(request.layer_keys)))
+            if used
+        ]
+        if dropped:
+            raise typer.BadParameter(
+                f"{', '.join(dropped)} not supported with --mode bash "
+                "(the legacy generator has no equivalent); use the native engine."
+            )
+
+
 def _projections_for(projection: ProjectionChoice, registry: LayerRegistry) -> list[str]:
     if projection is ProjectionChoice.all:
         return list(registry.projections.keys())
@@ -257,7 +293,38 @@ def tiles_entry(
     if ctx.invoked_subcommand is not None:
         return
 
-    request = _build_tile_request(locals())
+    request = _build_tile_request(
+        {
+            "layer_type": layer_type,
+            "projection": projection,
+            "mode": mode,
+            "all_": all_,
+            "tile_join": tile_join,
+            "add_btis": add_btis,
+            "dry_run": dry_run,
+            "force": force,
+            "layer": layer,
+            "aeroway": aeroway,
+            "boundary": boundary,
+            "building": building,
+            "cemetery": cemetery,
+            "geonames": geonames,
+            "transportation": transportation,
+            "utilities": utilities,
+            "other": other,
+            "builtuparea": builtuparea,
+            "contour": contour,
+            "glacier": glacier,
+            "landcover": landcover,
+            "mountain": mountain,
+            "park": park,
+            "water": water,
+            "water_label": water_label,
+            "waterway": waterway,
+            "inland_water": inland_water,
+        }
+    )
+    _validate_request(request)
     settings = settings_from_ctx(ctx)
     log: logging.Logger = ctx.obj["log"]
 

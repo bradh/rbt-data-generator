@@ -19,6 +19,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from psycopg.conninfo import make_conninfo
+
 from .paths import config_dir, project_root
 
 _ASSIGNMENT_RE = re.compile(r"^([A-Z_][A-Z0-9_]*)=(.*)$")
@@ -76,28 +78,30 @@ class Settings:
     osm_config_file: Path = Path("setup/data-sources/osm/imposm-config.json")
 
     def psql_conn_string(self, dbname: str | None = None) -> str:
-        db = dbname or self.database_name
-        parts = [
-            f"host={self.database_host}",
-            f"port={self.database_port}",
-            f"dbname={db}",
-            f"user={self.database_user}",
-        ]
+        # make_conninfo escapes values (quoting spaces, backslashes, quotes), so
+        # a password like ``p'ss word`` produces a valid libpq conninfo string
+        # instead of a misparsed one.
+        params: dict[str, str] = {
+            "host": self.database_host,
+            "port": str(self.database_port),
+            "dbname": dbname or self.database_name,
+            "user": self.database_user,
+        }
         if self.database_password:
-            parts.append(f"password={self.database_password}")
-        return " ".join(parts)
+            params["password"] = self.database_password
+        return make_conninfo(**params)
 
     def ogr_pg_connection(self, dbname: str | None = None) -> str:
-        db = dbname or self.database_name
-        parts = [
-            f"dbname={db}",
-            f"host={self.database_host}",
-            f"port={self.database_port}",
-            f"user={self.database_user}",
-        ]
-        if self.database_password:
-            parts.append(f"password={self.database_password}")
-        return "PG:" + " ".join(parts)
+        # No password here on purpose: OGR/GDAL reads it from PGPASSWORD (supplied
+        # via libpq_env()), which keeps the secret out of argv and the per-layer
+        # log files written by process.run().
+        conninfo = make_conninfo(
+            dbname=dbname or self.database_name,
+            host=self.database_host,
+            port=str(self.database_port),
+            user=self.database_user,
+        )
+        return "PG:" + conninfo
 
     def libpq_env(self) -> dict[str, str]:
         env = {
@@ -154,12 +158,18 @@ def _parse_conf_line(line: str, env: dict[str, str]) -> tuple[str, str] | None:
     if not match:
         return None
     key, raw_value = match.group(1), match.group(2).strip()
-    raw_value = raw_value.split("#", 1)[0].rstrip()
     if not raw_value:
         return key, ""
-    # Strip surrounding quotes
-    if len(raw_value) >= 2 and raw_value[0] == raw_value[-1] and raw_value[0] in ("'", '"'):
-        raw_value = raw_value[1:-1]
+    # Quote-aware parsing must run before comment stripping: a quoted value may
+    # legitimately contain '#' (common in passwords, e.g. "pass#word"). Only an
+    # unquoted '#' introduces an inline comment.
+    if raw_value[0] in ("'", '"'):
+        quote = raw_value[0]
+        close = raw_value.find(quote, 1)
+        if close != -1:
+            return key, _expand_shell_vars(raw_value[1:close], env)
+        # Unterminated quote: fall through to unquoted handling.
+    raw_value = raw_value.split("#", 1)[0].rstrip()
     return key, _expand_shell_vars(raw_value, env)
 
 
@@ -237,8 +247,12 @@ def load_settings(overrides: dict[str, str] | None = None) -> Settings:
     conf = _read_conf(conf_path, expansion_env)
 
     def resolve(*keys: str, default: str = "") -> str:
-        for key in keys:
-            for source in (overrides, os.environ, conf):
+        # Sources are the outer loop so precedence (overrides > env > conf) holds
+        # across aliases: a legacy alias set in a higher-priority source must beat
+        # the canonical alias set in a lower-priority one. Within a single source,
+        # the canonical alias (listed first) wins.
+        for source in (overrides, os.environ, conf):
+            for key in keys:
                 value = source.get(key)
                 if value:
                     return value

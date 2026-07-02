@@ -83,6 +83,13 @@ def run_tippecanoe(
         registry=registry,
     )
     settings.tile_temp_dir.mkdir(parents=True, exist_ok=True)
+    # tippecanoe refuses to overwrite an existing .mbtiles, so remove a stale one
+    # first; otherwise `rbt tiles --force` (and any re-run) crashes once a layer's
+    # output already exists. The overwrite flag is deliberately kept out of
+    # build_tippecanoe_command so its argv stays identical to the legacy bash
+    # generator for the parity tests.
+    if not dry_run and output_file.exists():
+        output_file.unlink()
     run(cmd, log_file=log_file, dry_run=dry_run)
     return output_file
 

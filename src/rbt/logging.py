@@ -4,12 +4,11 @@ Wraps :mod:`logging` with :class:`rich.logging.RichHandler` so that:
 
 - TTYs get colored output matching ``scripts/lib/logging.sh``.
 - Non-TTYs (CI, Docker logs, files) emit plain timestamps.
-- Each invocation can optionally duplicate to a rotating file.
+- Each invocation can optionally duplicate to a log file.
 """
 
 from __future__ import annotations
 
-import atexit
 import logging
 from pathlib import Path
 from typing import Final
@@ -37,8 +36,11 @@ def configure_logging(
     root = logging.getLogger()
     root.setLevel(_LEVEL_MAP.get(level.upper(), logging.INFO))
 
+    # Close and drop any handlers from a previous configure_logging call so
+    # repeated invocations (e.g. across tests) don't leak file descriptors.
     for handler in list(root.handlers):
         root.removeHandler(handler)
+        handler.close()
 
     rich_handler = RichHandler(
         console=console or Console(stderr=True),
@@ -61,7 +63,8 @@ def configure_logging(
             )
         )
         root.addHandler(file_handler)
-        atexit.register(file_handler.close)
+        # No explicit atexit hook: the logging module already registers
+        # logging.shutdown() atexit, which flushes and closes every handler.
 
     return logging.getLogger("rbt")
 

@@ -219,10 +219,12 @@ def load_registry(path: Path | None = None) -> LayerRegistry:
     filters = {k: v.strip() for k, v in (raw.get("filters", {}) or {}).items()}
 
     projections: dict[str, Projection] = {}
-    for code, info in (raw.get("projections", {}) or {}).items():
+    for code, raw_info in (raw.get("projections", {}) or {}).items():
+        info = raw_info or {}
+        context = f"projection '{code}'"
         projections[str(code)] = Projection(
             code=str(code),
-            epsg=info["epsg"],
+            epsg=str(_require(info, "epsg", context=context)),
             output_dir=info.get("output_dir", f"tiles_{code}"),
             tile_origin_x=str(info.get("tile_origin_x", "0")),
             tile_origin_y=str(info.get("tile_origin_y", "0")),
@@ -252,11 +254,12 @@ def load_registry(path: Path | None = None) -> LayerRegistry:
                 )
 
     schemas: dict[str, SchemaFile] = {}
-    for key, spec in (raw.get("schemas", {}) or {}).items():
+    for key, raw_spec in (raw.get("schemas", {}) or {}).items():
+        spec = raw_spec or {}
         context = f"schemas.{key}"
         schemas[str(key)] = SchemaFile(
             key=str(key),
-            layer_type=str(spec.get("type", "")),
+            layer_type=str(_require(spec, "type", context=context)),
             sql=str(_require(spec, "sql", context=context)),
             description=str(spec.get("description", "")),
         )

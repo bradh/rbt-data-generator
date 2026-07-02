@@ -39,8 +39,10 @@ from tests.parity_support import (
     GENERATE_TILES,
     NATIVE_ONLY_WATER_OPTIONS,
     REPO_ROOT,
+    capture_bash_building_argv,
     capture_bash_water_argv,
     database_reachable,
+    native_layer_invocation,
     native_water_invocation,
     parse_tippecanoe_argv,
     settings,
@@ -97,6 +99,29 @@ def test_water_option_set_drift_is_exactly_the_known_set(
         "native-only tippecanoe options changed — update config/layers.yml (preferred) "
         "or the pinned drift set, and re-run docs/parity-runbook.md"
     )
+
+
+@pytest.mark.parametrize("projection_code", ["3857", "3395"])
+def test_building_tippecanoe_invariants_match_bash(tmp_path: Path, projection_code: str) -> None:
+    """A cultural layer (building) must match the bash generator on zooms, layer
+    naming, source SRS, the -j filter, and -T casts.
+
+    The other parity tests only exercised the physical water layer; this extends
+    the bash-vs-native comparison to the cultural pipeline so a cultural registry
+    change that diverges from the deprecated generator is caught.
+    """
+    bash = parse_tippecanoe_argv(capture_bash_building_argv(tmp_path, projection_code))
+    native = native_layer_invocation(tmp_path, projection_code, "building")
+
+    assert (bash.min_zoom, bash.max_zoom) == (native.min_zoom, native.max_zoom)
+    assert bash.layer_name == native.layer_name == "building"
+    assert bash.display_name == native.display_name == "building"
+    assert bash.source_srs == native.source_srs == "EPSG:3857"
+    # -j filters compare as parsed JSON (whitespace-insensitive); the registry
+    # `filters.building` entry must match the bash BUILDING_FILTER.
+    assert bash.filter_expr == native.filter_expr
+    assert bash.attr_casts == native.attr_casts
+    assert bash.output_name == native.output_name == f"building_{projection_code}.mbtiles"
 
 
 def test_bash_generator_accepts_every_registry_category_flag() -> None:
