@@ -20,6 +20,14 @@ permissions:
   pages: write
   id-token: write
 
+# Only one Pages deployment can be in flight at a time. Without this, two
+# pushes to main in quick succession race on the same GitHub Pages
+# environment and the second `deploy-pages` call fails with
+# "Deployment failed, try again later."
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -37,6 +45,9 @@ jobs:
           pip install -r requirements-docs.txt
           # The CLI reference page imports rbt.cli at build time.
           pip install -e .
+      # Ensures the repo's Pages environment is initialized before we
+      # upload/deploy; required by GitHub's own Pages workflow template.
+      - uses: actions/configure-pages@v5
       - name: Build site
         run: mkdocs build --strict
       - uses: actions/upload-pages-artifact@v5
