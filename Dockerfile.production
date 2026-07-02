@@ -31,8 +31,11 @@ ARG PYTHON_VERSION
 ARG GDAL_VERSION
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Fail piped RUN steps if any stage of the pipe fails (hadolint DL4006). Set in
-# the base stage and inherited by every stage built FROM it.
+# Fail piped RUN steps if any stage of the pipe fails (hadolint DL4006).
+# NOTE: SHELL is a per-stage build setting — it does NOT carry over to later
+# stages started with `FROM base AS ...`, even though the base image's layers
+# (and ENV/WORKDIR) do. Any stage below with a pipe in a RUN command must
+# re-declare this SHELL line.
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN apt-get update \
@@ -99,6 +102,10 @@ FROM base AS imposm-fetcher
 
 ARG IMPOSM_VERSION
 ARG IMPOSM_SHA256
+
+# Re-declared: SHELL does not carry over from the base stage (see note there).
+# This stage's RUN pipes the sha256 line into `sha256sum -c -`.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN set -eux \
     && wget -nv -O /tmp/imposm.tar.gz \
