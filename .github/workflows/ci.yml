@@ -20,7 +20,7 @@ jobs:
   shell-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install shellcheck
         run: sudo apt-get update && sudo apt-get install -y shellcheck
       - name: shellcheck
@@ -33,8 +33,8 @@ jobs:
   sql-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - name: Install sqlfluff
@@ -57,9 +57,9 @@ jobs:
   dockerfile-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: hadolint
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: Dockerfile.production
 
@@ -67,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [dockerfile-lint]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # Build the Python wheel stage so a broken build context (e.g. a file
       # excluded by .dockerignore that the Dockerfile COPYs) fails CI instead of
       # only surfacing at deploy time. hadolint alone never runs `docker build`.
@@ -83,7 +83,7 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
       - name: Log in to GHCR
@@ -124,8 +124,8 @@ jobs:
   yaml-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - run: pip install yamllint
@@ -137,8 +137,8 @@ jobs:
   python:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           # Must match (or exceed) the floor declared in pyproject.toml's
           # `requires-python`; uv sync fails outright otherwise.
@@ -181,7 +181,7 @@ jobs:
       PG_USR: rbt_user
       PG_PASS: rbt_password
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install runtime dependencies
         run: |
           sudo install -d /usr/share/postgresql-common/pgdg
@@ -236,7 +236,7 @@ jobs:
       PG_USR: rbt_user
       PG_PASS: rbt_password
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install runtime dependencies
         run: |
           sudo install -d /usr/share/postgresql-common/pgdg
@@ -255,7 +255,7 @@ jobs:
           echo "$HOME/micromamba/envs/geo/bin" >> "$GITHUB_PATH"
       - name: Cache tippecanoe
         id: cache-tippecanoe
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/tippecanoe-prefix
           key: tippecanoe-2.79.0-ubuntu24
