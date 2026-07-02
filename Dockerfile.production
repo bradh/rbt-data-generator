@@ -45,6 +45,7 @@ RUN apt-get update \
         wget \
         gnupg \
         lsb-release \
+        unzip \
     && install -d /usr/share/postgresql-common/pgdg \
     && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
          | gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg \
@@ -56,11 +57,18 @@ RUN apt-get update \
         sqlite3 \
         aria2 \
         p7zip-full \
-        awscli \
         osmctools \
         osmium-tool \
         osmosis \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    # Ubuntu dropped the `awscli` apt package (the legacy v1 CLI); install AWS
+    # CLI v2 from the official bundle instead. `uname -m` maps directly onto
+    # AWS's per-arch bundle names (x86_64 / aarch64), so this works unmodified
+    # on both the amd64 CI/production target and arm64 local dev.
+    && curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip \
+    && unzip -q /tmp/awscliv2.zip -d /tmp \
+    && /tmp/aws/install \
+    && rm -rf /tmp/awscliv2.zip /tmp/aws
 
 # Python + GDAL via micromamba/conda-forge, so both track current upstream
 # releases regardless of what the base distro ships.
