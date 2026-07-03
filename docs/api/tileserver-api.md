@@ -2,6 +2,14 @@
 
 TileServer-GL is a Node.js-based server for serving raster and vector map tiles from MBTiles files, with support for static map images, styles, sprites, fonts, and more.
 
+This project runs `maptiler/tileserver-gl:v5.6.0` via the `serve` Compose
+profile (`docker compose --profile production --profile serve up -d`),
+configured by [`config/tile-server.json`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/tile-server.json).
+It exposes two MBTiles data sources built by `rbt tiles`:
+
+- `physical-3857` → `physical/3857/physical_3857.mbtiles`
+- `cultural-3857` → `cultural/3857/cultural_3857.mbtiles`
+
 ## Key Features
 
 - **Map Styles**: Serve Mapbox GL JS style specifications

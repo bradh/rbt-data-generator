@@ -45,10 +45,11 @@ flowchart LR
 === "rbt CLI"
 
     ```bash
-    # Full workflow: download planet, diffs, merge, apply, import
-    rbt import osm
+    # A stage flag is required — the leaf script exits with an error if none
+    # is given. Full workflow: download planet, diffs, merge, apply, import
+    rbt import osm -- --all
 
-    # Pass stage flags through to the leaf script (after `--`)
+    # Or pass a narrower stage flag through to the leaf script (after `--`)
     rbt import osm -- --download-planet
     rbt import osm -- --download-diffs 713 730
     rbt import osm -- --import
@@ -56,6 +57,9 @@ flowchart LR
     # Preview without executing
     rbt import osm --dry-run
     ```
+
+    `rbt osm import` is an alias for the same command (kept for symmetry with
+    `rbt osm run|status|stop`); prefer `rbt import osm` in new scripts.
 
 === "Docker Compose"
 
@@ -121,6 +125,7 @@ The script uses multiple mirror servers for redundancy:
 - download.bbbike.org
 - ftp.nluug.nl
 - ftp.osuosl.org
+- ftp.snt.utwente.nl
 - planet.openstreetmap.org
 
 ### osmium - OSM Data Manipulation Tool
@@ -184,7 +189,7 @@ imposm run -config config.json
 
 - Host: value of `DATABASE_HOST` (e.g. `localhost`, or the `postgres` Compose service)
 - Database: rbt
-- SRID: 4326 (WGS84 coordinate system)
+- SRID: 3857 (Web Mercator — set by `OSM_SRID`, the SRID imposm3 stores geometries in)
 - No table prefix (prefix=NONE)
 
 ## Configuration Files
@@ -459,7 +464,9 @@ These apply to the `import-osm-data.sh` leaf script behind `rbt import osm`:
 
 - Detailed logging with timestamps
 - Progress tracking for long operations
-- Health check server on port 8080
+- `start_health_check_server` logs the configured port but is currently a
+  no-op (no HTTP listener) — the container orchestrator (Docker
+  `HEALTHCHECK`, Kubernetes probes) owns liveness checking instead
 - PID file for process management
 
 ### Configuration Options
@@ -477,7 +484,9 @@ DIFF_START_SEQ      # Default diff start sequence (713)
 DIFF_END_SEQ        # Default diff end sequence (730)
 OSM_CLEANUP_ON_EXIT # Remove temp files (default: true)
 OSM_VALIDATE_DOWNLOADS # Validate file integrity (default: true)
-OSM_MIN_PBF_SIZE_MB # Minimum PBF size in MB for the import-stage size check (default: 10)
+OSM_MIN_PBF_SIZE_MB # Minimum PBF size in MB for the import-stage size check
+                     # (default: 50000 — a planet-sized floor; lower it, e.g.
+                     # to 10, when importing a small regional extract)
 ```
 
 See [configuration.md](configuration.md) for the full reference.
@@ -496,14 +505,14 @@ are not running, so it slots directly into monitoring scripts.
 
 ### Health Check Endpoint
 
-During a one-time import, the leaf script starts a health check server on port 8080 (configurable) that responds with HTTP 200 OK. This is useful for:
-
-- Container orchestration (Kubernetes, Docker Swarm)
-- Load balancer health checks
-- Monitoring systems
+During a one-time import, the leaf script's `start_health_check_server` hook
+only logs the configured port (`OSM_HEALTH_CHECK_PORT`, default 8080) — it
+does not open an HTTP listener. Container orchestration (Kubernetes, Docker
+Swarm) and load balancers should not point at this port for liveness.
 
 For the running system, `rbt health` (the Docker HEALTHCHECK command)
-verifies a database round-trip.
+verifies a database round-trip; use it (or `rbt osm status`) for real health
+signals instead.
 
 ### Log Analysis
 

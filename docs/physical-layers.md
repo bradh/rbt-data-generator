@@ -8,14 +8,19 @@
     concepts described here are still broadly accurate, but to actually run
     anything, use today's commands:
 
-    - Schema processing: `rbt schema list` / `rbt schema run physical` (dispatches
-      the real files under
-      [`setup/data-sources/schemas/physical/`](https://github.com/MJJ203/rbt-data-generator/tree/main/setup/data-sources/schemas/physical)
-      — `physical-core.sql`, `landcover.sql`, `water-features.sql`, `terrain.sql`).
+    - Schema processing: `rbt schema list` shows the registered units. Each key runs
+      exactly **one** file — there is no single `physical` command that runs every
+      physical SQL file; use `rbt schema run --type physical` or `--all` for that:
+        - `rbt schema run physical` → `physical-core.sql` (built-up areas, glaciers, mountain labels, parks)
+        - `rbt schema run landcover` → `landcover.sql`
+        - `rbt schema run water` → `water-features.sql`
+        - `rbt schema run contour` → `terrain.sql`
+        - `rbt schema run --type physical` or `rbt schema run --all` → every physical unit
     - Tile generation: `rbt tiles --layer-type physical --projection <3857|3395|4326> [--water|--landcover|...]`
       (see the [CLI Reference](cli.md) and [`config/layers.yml`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/layers.yml)
       for the declarative layer/filter definitions that replaced the JSON
-      configs and per-layer bash flags below).
+      configs and per-layer bash flags below — including `physical_layer_config.json`,
+      which is also gone).
 
 ## Overview
 
@@ -142,7 +147,7 @@ Specialized script using GDAL's MVT driver for EPSG:4326 tiles:
 - **Direct MVT Generation**: Uses ogr2ogr with MVT format for direct PostgreSQL to MVT conversion
 - **Custom Tiling Scheme**: EPSG:4326 with custom geographic tiling
 - **Unified Processing**: Processes all layers in a single ogr2ogr command
-- **JSON Configuration**: Uses `physical_layer_config.json` for layer definitions
+- **JSON Configuration**: Historically used a standalone `physical_layer_config.json`; today the equivalent definitions live in the `gdal_mvt:` section of [`config/layers.yml`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/layers.yml), consumed by `src/rbt/tiles/gdal_mvt.py`
 - **Directory Output**: Creates directory-based tile structure
 
 ## Tools and Technologies
@@ -585,7 +590,7 @@ ogr2ogr \
 
 #### Key Characteristics:
 - **Single Command Processing**: Processes all layers in one ogr2ogr command
-- **JSON Configuration**: Uses `physical_layer_config.json` for layer definitions
+- **JSON Configuration**: Historically `physical_layer_config.json`; today the `gdal_mvt:` block of `config/layers.yml`
 - **Directory Output**: Creates directory-based tile structure instead of MBTiles
 - **Custom Tiling**: EPSG:4326 geographic coordinate tiling scheme
 - **Layer Grouping**: Organizes tables by logical categories
@@ -639,6 +644,16 @@ sqlite3 "$target_file" "INSERT OR REPLACE INTO metadata(name,value) VALUES('btp_
 - Z10: Every 5th contour line (nth_line = 5)
 - Z12: Every 2nd contour line (nth_line = 2)
 - Z13: All contour lines
+
+!!! note "Current per-projection behavior differs"
+    The `nth_line`-filtered `contour_z8`/`_z10`/`_z12` views described above
+    are still created by `terrain.sql`, but today only the **EPSG:4326**
+    backend (`rbt tiles --layer-type physical --projection 4326`) consumes
+    them directly as separate zoom windows (`gdal_mvt:` section of
+    `config/layers.yml`). The **3857/3395** tippecanoe path instead exports
+    `rbt.contour` as one source with `min_zoom: 9` and lets tippecanoe's own
+    simplification (`--simplify-only-low-zooms`) handle density — it does not
+    read the `nth_line` zoom views at all.
 
 ### 2. Hydrology
 
@@ -703,9 +718,11 @@ The water layer demonstrates complex spatial processing:
 #### Data Flow:
 1. **Import** → `import.water` table with raw OSM data
 2. **Classification** → `classify_water_type()` function normalizes subtypes
-3. **Surface Creation** → `water_surface` materialized view filters permanent water
-4. **Clustering** → `water` view clusters and merges nearby polygons
-5. **Simplification** → `water_simplified` for low zoom levels
+3. **Surface Creation** → `rbt.water_surface`, an internal staging materialized
+   view (not a registered tile layer) that filters permanent water
+4. **Clustering** → `rbt.water` — the actual `water` tile layer — clusters and
+   merges nearby polygons from `water_surface`
+5. **Simplification** → `rbt.water_simplified` for low zoom levels
 
 #### Clustering Algorithm:
 ```sql
@@ -779,6 +796,14 @@ Filter configuration controls:
 - Glacier overlay separation
 
 ## Command Reference
+
+!!! note "Modern equivalents"
+    Every command in this section refers to scripts that no longer exist.
+    Use `rbt schema run <physical|landcover|water|contour>` (or `--type
+    physical` / `--all`) in place of `process-physical-schemas.sh`, and `rbt
+    tiles --layer-type physical --projection <3857|3395|4326> [--water
+    --landcover ...]` in place of `generate-physical-3857-3395.sh` /
+    `generate-physical-4326.sh`. See the [CLI Reference](cli.md) for every flag.
 
 ### SQL Processing Commands
 
@@ -947,36 +972,40 @@ The unified `tiles.sh` script includes built-in JSON filters for zoom-based feat
 
 ## Workflow Examples
 
+These are rewritten for the current `rbt` CLI (the historical `sql.sh` /
+`tiles.sh` / `4326_tiles.sh` scripts referenced elsewhere on this page no
+longer exist).
+
 ### Complete Processing Workflow
 
-**1. Database Setup (Run SQL Processing):**
+**1. Database Setup (Run Schema Processing):**
 ```bash
-# Process all SQL components
-./sql.sh --all
+# Process every physical schema unit
+rbt schema run --type physical
 
 # Or process selectively
-./sql.sh --physical --landcover --water
+rbt schema run physical landcover water
 ```
 
 **2. Generate Tiles for Different Projections:**
 ```bash
-# Web Mercator tiles with all layers
-./tiles.sh --all --tile-join --add-btis
+# Web Mercator tiles with all physical layers
+rbt tiles --layer-type physical --projection 3857 --all
 
 # World Mercator tiles for specific layers
-./tiles.sh --projection 3395 --water --landcover --glacier --tile-join
+rbt tiles --layer-type physical --projection 3395 --water --landcover --glacier
 
-# Geographic coordinate tiles
-./4326_tiles.sh
+# Geographic coordinate tiles (native GDAL MVT backend)
+rbt tiles --layer-type physical --projection 4326 --all
 ```
 
 **3. Selective Layer Processing:**
 ```bash
 # Generate only water-related layers
-./tiles.sh --water --waterway --inland-water --tile-join
+rbt tiles --layer-type physical --water --waterway --inland-water
 
 # Generate terrain layers in World Mercator
-./tiles.sh --projection 3395 --contour --glacier --mountain --add-btis
+rbt tiles --layer-type physical --projection 3395 --contour --glacier --mountain
 ```
 
 ### Development and Testing Workflow
@@ -984,27 +1013,27 @@ The unified `tiles.sh` script includes built-in JSON filters for zoom-based feat
 **1. Test Single Layer:**
 ```bash
 # Test landcover processing
-./sql.sh --landcover
-./tiles.sh --landcover
+rbt schema run landcover
+rbt tiles --layer-type physical --landcover
 
 # Test water processing with specific projection
-./sql.sh --water
-./tiles.sh --projection 3395 --water --add-btis
+rbt schema run water
+rbt tiles --layer-type physical --projection 3395 --water
 ```
 
 **2. Incremental Processing:**
 ```bash
-# Add new layer type without reprocessing existing
-./sql.sh --contour
-./tiles.sh --contour --tile-join  # Joins with existing tiles
+# Add new layer type without reprocessing existing schemas
+rbt schema run contour
+rbt tiles --layer-type physical --contour  # Regenerates just this layer
 ```
 
 **3. Performance Testing:**
 ```bash
 # Generate with different projections for comparison
-./tiles.sh --projection 3857 --all --tile-join
-./tiles.sh --projection 3395 --all --tile-join
-./4326_tiles.sh
+rbt tiles --layer-type physical --projection 3857 --all
+rbt tiles --layer-type physical --projection 3395 --all
+rbt tiles --layer-type physical --projection 4326 --all
 ```
 
 ### Production Deployment Workflow
@@ -1014,37 +1043,40 @@ The unified `tiles.sh` script includes built-in JSON filters for zoom-based feat
 #!/bin/bash
 set -e
 
-# Set environment variables
+# Configure via config/rbt.conf or environment (PG_HOST/PG_USR/PG_PASS or
+# DATABASE_*/PG_* — see the Configuration Reference)
 export PG_HOST="your-postgres-host"
 export PG_USR="your-username"
 export PG_PASS="your-password"
 
-# Process all SQL components
 echo "Processing database layers..."
-./sql.sh --all
+rbt schema run --type physical
 
-# Generate tiles for all projections
 echo "Generating Web Mercator tiles..."
-./tiles.sh --all --tile-join --add-btis
+rbt tiles --layer-type physical --projection 3857 --all
 
 echo "Generating World Mercator tiles..."
-./tiles.sh --projection 3395 --all --tile-join --add-btis
+rbt tiles --layer-type physical --projection 3395 --all
 
 echo "Generating geographic coordinate tiles..."
-./4326_tiles.sh
+rbt tiles --layer-type physical --projection 4326 --all
 
 echo "Physical tile processing completed successfully!"
 ```
 
+Or the Docker Compose equivalent for the same run: `docker compose run --rm
+rbt-tiles rbt tiles --layer-type physical --all` (see the
+[Operations Guide](operations.md)).
+
 **2. Layer-Specific Updates:**
 ```bash
 # Update only landcover data
-./sql.sh --landcover
-./tiles.sh --landcover --tile-join  # Updates existing consolidated tiles
+rbt schema run landcover
+rbt tiles --layer-type physical --landcover
 
 # Update water processing with new classification
-./sql.sh --water
-./tiles.sh --water --waterway --inland-water --tile-join
+rbt schema run water
+rbt tiles --layer-type physical --water --waterway --inland-water
 ```
 
 ## Performance Optimizations

@@ -31,7 +31,7 @@ Please **do not** open a public GitHub issue for suspected vulnerabilities. Inst
 
 ## Dependency provenance
 
-- **imposm3 0.14.2** — downloaded from `github.com/omniscale/imposm3`; checksum verified in the Dockerfile.
+- **imposm3 0.14.2** — downloaded from `github.com/omniscale/imposm3`; checksum verification is opt-in via the `IMPOSM_SHA256` build-arg (default `SKIP`, which bypasses the check for local development) — pass the release's sha256 to enforce it in production builds.
 - **tippecanoe** — built from `felt/tippecanoe` (maintained fork); pinned to a release tag.
 - **GDAL / Python** — installed via micromamba from the `conda-forge` channel, pinned to exact versions in `Dockerfile.production`.
 - **PostGIS** — installed from the official `postgis/postgis` image and distribution apt repositories with signed metadata.

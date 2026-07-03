@@ -598,11 +598,11 @@ schemas:
   physical:
     type: physical
     sql: setup/data-sources/schemas/physical/physical-core.sql
-    description: Core physical views (water, glacier, built-up areas)
+    description: Core physical views (built-up areas, glaciers, mountain labels, parks)
   landcover:
     type: physical
     sql: setup/data-sources/schemas/physical/landcover.sql
-    description: Landcover and park views
+    description: Landcover polygon and label views
   water:
     type: physical
     sql: setup/data-sources/schemas/physical/water-features.sql
@@ -610,7 +610,7 @@ schemas:
   contour:
     type: physical
     sql: setup/data-sources/schemas/physical/terrain.sql
-    description: Contours and mountain labels
+    description: Contour and glacier-contour zoom views
   cultural:
     type: cultural
     sql: setup/data-sources/schemas/cultural/cultural-core.sql

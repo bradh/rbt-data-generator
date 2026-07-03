@@ -259,7 +259,8 @@ config/
 ├── rbt.conf              # Runtime settings (database, processing, tile generation)
 ├── layers.yml            # Declarative layer registry: layers, schema SQL units,
 │                         #   and the gdal_mvt (EPSG:4326) dataset definitions
-├── postgresql.conf       # PostgreSQL server tuning (mounted into the postgres container)
+├── postgresql.conf       # PostgreSQL server tuning (mounted into the postgres
+│                         #   container and loaded via a `command: -c config_file=...` override)
 ├── tile-server.json      # TileServer-GL data sources
 └── prometheus.yml        # Prometheus scrape configuration
 ```

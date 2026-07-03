@@ -6,9 +6,9 @@ numbers, they should agree with the tables here.
 
 !!! note "Most numbers on this page are estimates"
     The planet-scale durations were measured on the *recommended* tier below
-    with `PARALLEL_INGESTION=true`; everything else scales with disk speed,
-    network bandwidth, and how busy PostgreSQL is. Treat ranges as honest
-    expectations, not guarantees.
+    with `SCRIPT_PARALLEL_INGESTION=true`; everything else scales with disk
+    speed, network bandwidth, and how busy PostgreSQL is. Treat ranges as
+    honest expectations, not guarantees.
 
 ## Hardware tiers
 
@@ -35,7 +35,7 @@ Assumptions behind the table:
 
 ### Full planet (one-time initialization)
 
-Measured on the recommended tier with `PARALLEL_INGESTION=true`:
+Measured on the recommended tier with `SCRIPT_PARALLEL_INGESTION=true`:
 
 | Step | Duration |
 |---|---|
@@ -94,8 +94,10 @@ space is tight.
 ## PostgreSQL tuning
 
 [`config/postgresql.conf`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/postgresql.conf) is mounted into the
-compose `postgres` service and is the starting point for bare-metal installs
-too. The knobs that matter most:
+compose `postgres` service and loaded via a `command: ["postgres", "-c",
+"config_file=..."]` override (the mount alone would not be enough — Postgres
+still needs to be told to use it); it's also the starting point for
+bare-metal installs. The knobs that matter most:
 
 | Setting | Shipped value | Guidance |
 |---|---|---|

@@ -75,7 +75,7 @@ rbt --debug setup --import-reference-data
 
 # The importer leaf scripts honor SCRIPT_* variables from config/rbt.conf;
 # override per run to preserve temp files for inspection
-SCRIPT_CLEAN_TEMP_FILES=false SCRIPT_DEBUG=true rbt import osm
+SCRIPT_CLEAN_TEMP_FILES=false SCRIPT_DEBUG=true rbt import osm -- --all
 ```
 
 ## Tile generation issues
@@ -160,13 +160,14 @@ pidfile points at a dead process it is cleaned up automatically.
 ## Insufficient resources
 
 - Check disk space (`df -h`) and memory (`free -g` / `sysctl hw.memsize`) — `rbt validate` checks both against `DISK_SPACE_REQUIRED_GB`/`MEMORY_REQUIRED_GB`.
-- Lower `MAX_PARALLEL_JOBS` in `config/rbt.conf`.
+- `MAX_PARALLEL_JOBS` is reported by `rbt validate` but is not yet wired to any real parallelism in the Python CLI — lowering it has no effect today (see [Configuration](configuration.md)).
 - Set `SCRIPT_PARALLEL_INGESTION=false` to reduce peak memory during setup.
 
 ## Configuration inspection
 
 ```bash
-# rbt validate prints every resolved connection value
+# rbt validate prints the resolved DATABASE_HOST/USER/NAME (not the port or
+# password — the password is only flagged as unset, never printed)
 rbt validate
 
 # Validate referenced variables exist in the config file

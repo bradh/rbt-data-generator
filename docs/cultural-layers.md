@@ -7,10 +7,15 @@
     here are still broadly accurate, but to actually run anything, use
     today's commands:
 
-    - Schema processing: `rbt schema list` / `rbt schema run cultural` (dispatches
-      the real files under
-      [`setup/data-sources/schemas/cultural/`](https://github.com/MJJ203/rbt-data-generator/tree/main/setup/data-sources/schemas/cultural)
-      — `cultural-core.sql`, `transportation.sql`, `transportation-railway.sql`, `infrastructure.sql`).
+    - Schema processing: `rbt schema list` shows the registered units. `rbt
+      schema run cultural` dispatches only `cultural-core.sql` — the other
+      three cultural files each have their own key, all under
+      [`setup/data-sources/schemas/cultural/`](https://github.com/MJJ203/rbt-data-generator/tree/main/setup/data-sources/schemas/cultural):
+        - `rbt schema run cultural` → `cultural-core.sql`
+        - `rbt schema run highway` → `transportation.sql`
+        - `rbt schema run railway` → `transportation-railway.sql`
+        - `rbt schema run aero` → `infrastructure.sql`
+        - `rbt schema run --type cultural` or `rbt schema run --all` → every cultural unit
     - Tile generation: `rbt tiles --layer-type cultural --projection <3857|3395|4326> [--building|--transportation|...]`
       (see the [CLI Reference](cli.md)). `cultural_layer_config.json` is
       replaced by the declarative layer/filter definitions in
@@ -249,7 +254,8 @@ The `generate-cultural-3857-3395.sh` script (default behavior) generates standar
 #### Differences from 3395:
 - No tile projection transformation needed (tippecanoe native)
 - Different layer naming conventions (includes projection suffix)
-- No BTIS metadata addition
+- BTIS metadata is added the same way as 3395 — `rbt tiles` defaults
+  `--add-btis` to on for both mercator projections (see [BTIS Metadata](#btis-metadata) below)
 
 ### EPSG:4326 Pipeline (Geographic WGS 84)
 
@@ -324,7 +330,7 @@ ogr2ogr \
 
 ### 5. Utilities
 
-**Tables:** `dam_*`, `powerline`, `pipeline`, `power_station`, `pumping_station`, `hydrocarbon_*`, `grain_*`
+**Tables:** `dam_surface`, `dam_curve`, `dam_label`, `powerline`, `pipeline`, `utility_point`, `power_station`, `power_station_label`, `pumping_station`, `pumping_station_label`, `hydrocarbon_field`, `hydrocarbon_label`, `grain_srf`, `grain_srf_pnt`
 
 **Purpose:** Energy and utility infrastructure
 
@@ -335,7 +341,7 @@ ogr2ogr \
 
 ### 6. Geonames
 
-**Tables:** `geonames_hydrographic_*`, `populated_places_*`
+**Tables:** `geonames_hydrographic` (+ zoom variants), `populated_places` (+ zoom variants)
 
 **Purpose:** Geographic place names and hydrographic features
 
@@ -343,6 +349,20 @@ ogr2ogr \
 - Zoom-specific views for density management
 - Population-based ranking for places
 - Feature class filtering
+
+### 7. Cemetery
+
+**Tables:** `cemetery`, `cemetery_label`
+
+**Purpose:** Cemetery and graveyard polygons with religion/denomination labeling
+
+### 8. Other
+
+**Tables:** `stadium_surface`, `stadium_labels`, `us_military_installations`, `us_military_installations_labels`, `radar_point`
+
+**Purpose:** A catch-all `other` category in `config/layers.yml` for features that
+don't fit the categories above: stadiums/sports facilities, US military
+installations (from the MIRTA dataset), and radar towers.
 
 ## Detailed Layer Documentation
 
@@ -516,7 +536,11 @@ tile-join -f \           # Force overwrite
 
 ## BTIS Metadata
 
-The 3395 pipeline adds BTIS (Background Tile Information Standard) metadata:
+Both the 3857 and 3395 pipelines add BTIS (Background Tile Information
+Standard) metadata by default — `rbt tiles` defaults `--add-btis` to on for
+every mercator-projection run (pass `--no-btis` to disable it). The metadata
+values themselves (tile origin, tile dimension) are naturally
+projection-specific; the 3395 example below shows its values:
 
 ```sql
 -- CRS metadata

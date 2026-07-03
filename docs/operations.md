@@ -60,7 +60,7 @@ graph TB
 
 | Service | Profile | Command | Ports (localhost only) | Storage |
 |---|---|---|---|---|
-| `postgres` | *(none — auto-started)* | PostGIS 18-3.6 | `127.0.0.1:5432` | `postgres_data` volume, `config/postgresql.conf` mounted read-only |
+| `postgres` | *(none — auto-started)* | PostGIS 18-3.6, `-c config_file=...` | `127.0.0.1:5432` | `postgres_data` volume, `config/postgresql.conf` mounted read-only and loaded via a `command:` override |
 | `rbt-setup` | `setup` | `rbt setup --all` | — | `./output` bind, `setup_cache` volume |
 | `rbt-osm-updates` | `production` | `rbt osm run` | — | `./output` bind, `osm_cache` volume |
 | `rbt-tiles` | `production` | `rbt tiles --all` (image default) | — | `./output` bind (`TILE_CACHE_DIR=/app/output/tiles`) |
@@ -135,12 +135,11 @@ Lifecycle details:
   the same container:
   `docker compose exec rbt-osm-updates rbt osm status`.
 
-!!! warning "Compose stop grace period"
-    `docker-compose.yml` does not set `stop_grace_period`, so Compose's
-    default of 10 s applies — shorter than the supervisor's 30 s escalation
-    window. Use `docker compose stop -t 60 rbt-osm-updates` (or add
-    `stop_grace_period: 60s` to the service) to guarantee imposm always gets
-    a clean shutdown.
+!!! note "Compose stop grace period"
+    `docker-compose.yml` sets `stop_grace_period: 35s` on `rbt-osm-updates`,
+    comfortably longer than the supervisor's 30 s SIGTERM→SIGKILL escalation
+    window, so `docker compose stop rbt-osm-updates` already gives imposm a
+    clean shutdown without extra flags.
 
 ## Tile Generation Runbook
 
@@ -267,7 +266,7 @@ into every container):
 | `output/logs/schema_<key>_<timestamp>.log` | `psql` output of each `rbt schema run` unit. |
 | `output/logs/osm_import.log` | Planet import leaf script (`OSM_LOG_FILE`). |
 | `output/tiles/<type>/<proj>/*.log` | Per-layer export/tippecanoe logs, `merge_<proj>.log`, `<type>_4326_mvt.log`. |
-| `/var/log/postgresql/` (in the `postgres` container) | PostgreSQL server logs, rotated daily/100 MB per `config/postgresql.conf`. |
+| `docker compose logs postgres` (stderr) | PostgreSQL server logs. `config/postgresql.conf` intentionally leaves `logging_collector` off (no writable `log_directory` is provisioned), so logs go to stderr and are captured by the container's log driver rather than rotated files under `/var/log/postgresql/`. |
 
 ## Maintenance
 
