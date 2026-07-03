@@ -271,11 +271,13 @@ jobs:
       PG_DATABASE: rbt
       PG_USR: rbt_user
       PG_PASS: rbt_password
-      # Absolute path: rbt.conf's relative default breaks the bash wrapper's
-      # logging after its leaf scripts cd into their own directories.
-      SHARED_LOG_DIR: ${{ runner.temp }}/logs
     steps:
       - uses: actions/checkout@v7
+      # Absolute path (runner context is step-only, hence GITHUB_ENV):
+      # rbt.conf's relative SHARED_LOG_DIR default breaks the bash wrapper's
+      # logging after its leaf scripts cd into their own directories.
+      - name: Point SHARED_LOG_DIR at an absolute path
+        run: echo "SHARED_LOG_DIR=$RUNNER_TEMP/logs" >> "$GITHUB_ENV"
       - name: Install runtime dependencies
         run: |
           sudo install -d /usr/share/postgresql-common/pgdg
