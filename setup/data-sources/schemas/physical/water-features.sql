@@ -683,7 +683,7 @@ COMMIT;
 -- 3. Keeps only inland water features and ocean features separately
 -- Benefits:
 -- - Rivers/estuaries are properly clipped at ocean boundary
-================================
+-- ================================
 
 \echo 'Creating rbt.water materialized view...'
 
