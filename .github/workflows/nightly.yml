@@ -111,6 +111,9 @@ jobs:
           # script (running from its own directory) cannot resolve.
           OSM_CONFIG_FILE: ${{ github.workspace }}/setup/data-sources/osm/imposm-config.json
           OSM_MAPPING_FILE: ${{ github.workspace }}/setup/data-sources/osm/imposm-mapping.yaml
+          # Like the config/mapping paths, the default log path is relative
+          # and unreachable from the leaf script's own working directory.
+          OSM_LOG_FILE: ${{ runner.temp }}/osm_import.log
           # Admit the ~3.4 MB extract past the planet-scale size floor.
           OSM_MIN_PBF_SIZE_MB: "1"
         run: ~/.local/bin/uv run rbt --no-log-file setup --import-osm-data --osm-arg=--import
@@ -318,6 +321,9 @@ jobs:
           OSM_DIFF_DIR: ${{ runner.temp }}/osm-diff
           OSM_CONFIG_FILE: ${{ github.workspace }}/setup/data-sources/osm/imposm-config.json
           OSM_MAPPING_FILE: ${{ github.workspace }}/setup/data-sources/osm/imposm-mapping.yaml
+          # Like the config/mapping paths, the default log path is relative
+          # and unreachable from the leaf script's own working directory.
+          OSM_LOG_FILE: ${{ runner.temp }}/osm_import.log
           OSM_MIN_PBF_SIZE_MB: "1"
         run: |
           ~/.local/bin/uv run rbt --no-log-file setup --setup-database
