@@ -1019,8 +1019,9 @@ generate_metadata() {
     [[ " ${SELECTED_LAYERS[*]} " =~ " transportation " ]] && categories_json="${categories_json}        \"transport\": [\"ferry\", \"highway\", \"lock\", \"lock_label\", \"port_label\", \"port_surface\", \"railway\", \"railway_station\", \"railway_station_label\", \"yard_label\"],\n"
     [[ " ${SELECTED_LAYERS[*]} " =~ " utilities " ]] && categories_json="${categories_json}        \"infrastructure\": [\"dam_curve\", \"dam_surface\", \"dam_label\", \"grain_elevator_srf\", \"grain_elevator\", \"hydrocarbon_field\", \"hydrocarbon_label\", \"powerline\", \"pipeline\", \"utility_point\", \"power_station\", \"power_station_label\", \"pumping_station\", \"pumping_station_label\"],\n"
     
-    # Remove trailing comma and newline
-    categories_json=$(echo -e "$categories_json" | sed '$ s/,$//')
+    # Remove trailing comma and newline. Drop the blank line the final \n
+    # leaves behind first, or sed's $-address edits it instead of the comma.
+    categories_json=$(echo -e "$categories_json" | sed -e '/^$/d' -e '$ s/,$//')
     
     # Build tables list
     local tables_list=$(echo "${SELECTED_TABLES[@]}" | tr ',' '\n' | sed 's/^/        "/' | sed 's/$/",/' | sed '$ s/,$//')
