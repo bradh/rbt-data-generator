@@ -64,7 +64,7 @@ the OSM community derives from the coastline:
 |---|---|---|
 | `water-polygons-split-4326.zip` | `rbt.osm_ocean` | `water` (z10+) |
 | `simplified-water-polygons-split-3857.zip` | `rbt.osm_ocean_simplified` | `water` (low zooms via `rbt.water_simplified`) |
-| `coastlines-split-4326.zip` | `rbt.coastline` | coastline processing in the water views |
+| `coastlines-split-4326.zip` | `rbt.coastline` | Loaded but not currently referenced by any schema SQL — water/ocean splitting uses `osm_ocean`/`osm_ocean_simplified` instead. Kept for future coastline processing. |
 | `antarctica-icesheet-polygons-3857.zip` | `rbt.osm_antarctica_icesheet` | `glacier` (z7+ via `rbt.glacier_osm`) |
 
 These are regenerated daily by [osmdata.openstreetmap.de](https://osmdata.openstreetmap.de/)
@@ -106,9 +106,12 @@ and carry the same ODbL terms as OSM itself.
 - **License:** [public domain](https://www.naturalearthdata.com/about/terms-of-use/)
   — no attribution required ("Made with Natural Earth" is a courtesy).
 - **Download mechanism:** `ogr2ogr` reads the full
-  `natural_earth_vector.gpkg` directly from
-  `naciscdn.org/naturalearth/packages/natural_earth_vector.gpkg.zip`
-  (`/vsizip//vsicurl/`) into the `naturalearth` schema.
+  `natural_earth_vector.gpkg` directly from the zipped package at
+  `naciscdn.org/naturalearth/packages/natural_earth_vector.gpkg.zip`,
+  addressing the inner GeoPackage member path
+  (`.../natural_earth_vector.gpkg.zip/packages/natural_earth_vector.gpkg`)
+  via GDAL's `/vsizip//vsicurl/` chained virtual filesystem, into the
+  `naturalearth` schema.
 - **Update cadence:** versioned releases (currently the 5.x series),
   infrequent; the importer fetches whatever the CDN serves as current.
 - **Feeds:** the low-zoom halves of blended physical layers —
@@ -125,9 +128,9 @@ and carry the same ODbL terms as OSM itself.
   "All data is released to the Public Domain, and comes with no guarantee of
   accuracy or fitness for use."
 - **Download mechanism:** `ogr2ogr` reads `airports.csv` and `runways.csv`
-  straight from the GitHub mirror
-  (`raw.githubusercontent.com/davidmegginson/ourairports-data`) into
-  `ourairports.airport` and `ourairports.runway`.
+  straight from the `main` branch of the GitHub mirror
+  (`raw.githubusercontent.com/davidmegginson/ourairports-data/refs/heads/main/`)
+  into `ourairports.airport` and `ourairports.runway`.
 - **Update cadence:** community-maintained and continuously updated; the
   GitHub mirror tracks the live database, and the importer reads `main`.
 - **Feeds:** the aeroway layers — `airports`, `heliports`, and (joined with
@@ -177,17 +180,20 @@ and carry the same ODbL terms as OSM itself.
   Required attribution: "© OpenStreetMap contributors, Overture Maps
   Foundation".
 - **Download mechanism:** `aws s3 sync --no-sign-request` against
-  `s3://overturemaps-us-west-2/release/2025-05-21.0/theme=buildings/`,
+  `s3://overturemaps-us-west-2/release/2026-06-17.0/theme=buildings/`,
   then `ogr2ogr` loads `type=building` and `type=building_part` GeoParquet
   into `overture.building` / `overture.buildingpart`. An alternative
   high-throughput path, `tools/duckdb-building-export.sql` (see
   [DuckDB Buildings Export](duckdb-buildings.md)), reads the GeoParquet
-  directly with DuckDB and exports FlatGeoBuf — that script currently
-  references release `2025-08-20.1`.
-- **Update cadence:** Overture publishes versioned releases roughly monthly.
-  This pipeline pins a specific release; bumping it is a deliberate change to
-  the importer (and the DuckDB script, which should reference the same
-  release).
+  directly with DuckDB and exports FlatGeoBuf — both scripts are pinned to
+  the same release.
+- **Update cadence:** Overture publishes versioned releases roughly monthly
+  and only retains a rolling window of recent releases on the public S3
+  bucket (older releases 404 once superseded) — verify with `aws s3 ls
+  --no-sign-request --region us-west-2 s3://overturemaps-us-west-2/release/`
+  before pinning a new one. Bumping the release is a deliberate change that
+  must update **both** the importer and the DuckDB script together, since
+  they are expected to reference the same release.
 - **Feeds:** the `building` layer (`rbt.building`, plus the area-filtered
   `rbt.building_z10/z11/z12` zoom variants used by the 4326 backend).
 
@@ -200,7 +206,7 @@ and carry the same ODbL terms as OSM itself.
   text, so **verify before release** if you redistribute this layer
   commercially.
 - **Download mechanism:** `wget` fetches `installations_ranges.zip` from
-  `acq.osd.mil/eie/imr/rpid/disdi/Downloads/`, and `ogr2ogr` loads the
+  `www.acq.osd.mil/eie/imr/rpid/disdi/Downloads/`, and `ogr2ogr` loads the
   `MirtaLocations_A` feature class from `FY23_MIRTA_Final.gdb` into
   `mirta.us_military_installations`.
 - **Update cadence:** annual fiscal-year releases; the importer pins FY23.

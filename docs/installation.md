@@ -67,9 +67,13 @@ so run it after any install path below.
 
 === "Ubuntu 24.04"
 
-    These steps mirror what `Dockerfile.production` installs. Ubuntu 24.04's
-    apt repo only ships GDAL 3.8.x and Python 3.12, so both come from
-    [micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html)/conda-forge instead, to track current upstream releases.
+    These steps are modeled on `Dockerfile.production` but are not identical:
+    the image only installs the PostgreSQL **client** (the `postgres` service
+    itself always runs in a container) and roots its micromamba env at
+    `/opt/conda`, whereas the bare-metal commands below also cover running the
+    server locally and use micromamba's default `$HOME/micromamba` root.
+    Ubuntu 24.04's apt repo only ships GDAL 3.8.x and Python 3.12, so both
+    come from [micromamba](https://mamba.readthedocs.io/en/latest/installation/micromamba-installation.html)/conda-forge instead, to track current upstream releases.
 
     ```bash
     # PGDG repository for PostgreSQL 18
@@ -83,7 +87,13 @@ so run it after any install path below.
 
     # Client tools + importer dependencies (same set as the Docker image)
     sudo apt-get install -y postgresql-client-18 \
-        sqlite3 aria2 p7zip-full awscli osmctools osmium-tool osmosis
+        sqlite3 aria2 p7zip-full osmctools osmium-tool osmosis unzip
+
+    # Ubuntu dropped the `awscli` apt package (the legacy v1 CLI) — install
+    # AWS CLI v2 from the official bundle instead, same as the Docker image:
+    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip" -o /tmp/awscliv2.zip
+    unzip -q /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install
+    rm -rf /tmp/awscliv2.zip /tmp/aws
 
     # If the database runs on this host too:
     sudo apt-get install -y postgresql-18 postgresql-18-postgis-3
@@ -125,6 +135,9 @@ so run it after any install path below.
     Docker Compose is the recommended setup on macOS.
 
     ```bash
+    # NOTE: Homebrew's `tippecanoe` formula tracks upstream mapbox/tippecanoe,
+    # not the felt/tippecanoe fork this project pins (2.79.0+), and isn't
+    # version-pinned — expect behavioral drift versus the Docker image.
     brew install postgresql@18 postgis gdal tippecanoe aria2 awscli p7zip
     # No imposm3 formula or macOS release exists — use Docker for `rbt setup`
     # --import-osm-data and `rbt osm run`.

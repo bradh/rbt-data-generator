@@ -6,7 +6,7 @@ RBT Vector Tiles uses a centralized configuration file (`config/rbt.conf`) as th
 
 1. Environment variables exported at the shell (or passed via `docker-compose`).
 2. Values in [`config/rbt.conf`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/rbt.conf).
-3. Per-script defaults (usually defensive fallbacks in `scripts/lib/config.sh`).
+3. Built-in defaults — the `Settings` dataclass fields in `src/rbt/config.py` for the Python CLI; defensive fallbacks in `scripts/lib/config.sh` for the bash leaf scripts.
 
 ## Variable ownership
 
@@ -25,8 +25,13 @@ Every table below has an **Owner** column, verified against the actual consumers
 |---|---|---|---|
 | `MAX_PARALLEL_JOBS` | Python | `4` | Reported by `rbt validate`; not yet wired to real parallelism (see [Performance](performance.md)). Distinct from `SCRIPT_MAX_PARALLEL_JOBS` below. |
 | `RETRY_COUNT` | Python | `3` | Retry attempts for `rbt.process.run_with_retry`. |
-| `RETRY_DELAY` | Shared | `30` | Python retry backoff seconds; `import-osm-data.sh` also falls back to this name (the other three importers use `SCRIPT_RETRY_DELAY` instead — a pre-existing inconsistency, not a typo). |
+| `RETRY_DELAY` | Shared | `30` (Python) / `10` (bash) | Python retry backoff seconds, default `30` (`config.py`). `import-osm-data.sh` also falls back to this name but with its own unsourced default of `10` (the other three importers use `SCRIPT_RETRY_DELAY` instead — a pre-existing inconsistency, not a typo). |
 | `LOG_LEVEL` | Python | `INFO` | `DEBUG`, `INFO`, `WARN`, `ERROR`. |
+| `DEBUG` | Shared | `false` | Canonical name resolved first by `Settings.debug`; `SCRIPT_DEBUG` (below) is the fallback alias. |
+| `VERBOSE` | Shared | `false` | Canonical name resolved first by `Settings.verbose`; `SCRIPT_VERBOSE` (below) is the fallback alias. |
+| `CLEAN_TEMP_FILES` | Unused | `true` | Declared in `rbt.conf` but shadowed: `import-buildings.sh`/`import-geonames.sh`/`import-reference-data.sh` each read a local `CLEAN_TEMP_FILES` seeded from `SCRIPT_CLEAN_TEMP_FILES` (default `false`) instead of this key. |
+| `PARALLEL_INGESTION` | Unused | `false` | Same shadowing pattern — the importers read `SCRIPT_PARALLEL_INGESTION` into a local `PARALLEL_INGESTION`, ignoring this top-level key. |
+| `VALIDATE_DOWNLOADS` | Bash | `true` | Root-level fallback consumed by `import-osm-data.sh` only when `OSM_VALIDATE_DOWNLOADS` is unset (see OSM import section). |
 
 ### Tile generation
 
@@ -37,7 +42,7 @@ Every table below has an **Owner** column, verified against the actual consumers
 | `TILE_MAX_ZOOM` | Shared | `13` | Maximum zoom level. |
 | `TILE_MIN_ZOOM` | Shared | `0` | Minimum zoom level. |
 | `SUPPORTED_PROJECTIONS` | Bash | `"3857 3395 4326"` | Read-only; the Python CLI derives supported projections from `config/layers.yml` instead. |
-| `DEFAULT_PROJECTION` | Shared | `3857` | Projection used when `--projection` not provided, on both dispatch paths. |
+| `DEFAULT_PROJECTION` | Unused (by `rbt tiles`) | `3857` | Loaded into `Settings.default_projection` but not read by `rbt tiles` or `rbt tiles layer` — Typer supplies its own defaults (`--projection all` and `--projection 3857` respectively) regardless of this value. Only consumed by `production/generate-tiles.sh` when invoked directly (outside `--mode bash`). |
 | `LAYER_TYPES` | Bash | `"physical cultural"` | Read-only; the Python CLI hardcodes the same two types. |
 
 ### Database connection
@@ -69,13 +74,13 @@ These five are resolved independently by both sides using identical rules (`Sett
 
 | Variable | Owner | Default | Purpose |
 |---|---|---|---|
-| `OSM_LOG_FILE` | Bash | `./setup/data-sources/logs/osm_import.log` | Per-run OSM log. |
+| `OSM_LOG_FILE` | Bash | `${SHARED_LOG_DIR:-./output/logs}/osm_import.log` | Per-run OSM log. Falls back to `./output/logs/...` when `SHARED_LOG_DIR` is unset (only `./setup/.../logs/osm_import.log` if the script runs without sourcing `rbt.conf` at all). |
 | `OSM_DATA_DIR` | Bash | `/mnt/data` | Planet PBF + diffs landing zone. |
 | `OSM_CONFIG_FILE` | Shared | `./setup/data-sources/osm/imposm-config.json` | imposm3 config; read by `Settings.osm_config_file` (Python's `rbt osm run` supervisor) and by `import-osm-data.sh` as a fallback default. |
 | `OSM_MAPPING_FILE` | Bash | `./setup/data-sources/osm/imposm-mapping.yaml` | imposm3 mapping. |
 | `OSM_CACHE_DIR` | Bash | `/mnt/cache` | imposm3 cache directory. |
 | `OSM_DIFF_DIR` | Bash | `/mnt/diff` | Downloaded OSC diffs. |
-| `OSM_CONNECTION` | Bash | `postgis://postgres:postgres@localhost/rbt?prefix=NONE` | imposm3 connection string. |
+| `OSM_CONNECTION` | Bash | derived from `DATABASE_*` | imposm3 connection string, built from the resolved `DATABASE_USER`/`DATABASE_PASSWORD`/`DATABASE_HOST`/`DATABASE_PORT`/`DATABASE_NAME` so imposm targets the same database as the rest of the CLI. Only falls back to the hardcoded `postgis://postgres:postgres@localhost/rbt?prefix=NONE` if the script runs without sourcing `rbt.conf`. |
 | `OSM_SRID` | Bash | `3857` | SRID of imposm3-imported tables. |
 | `ARIA2C_MAX_DOWNLOADS` | Bash | `12` | Concurrent aria2c downloads. |
 | `ARIA2C_MAX_CONNECTIONS` | Bash | `16` | Connections per aria2c download. |
@@ -85,7 +90,8 @@ These five are resolved independently by both sides using identical rules (`Sett
 | `DIFF_END_SEQ` | Bash | `730` | Ending diff sequence for bulk backfill. |
 | `OSM_CLEANUP_ON_EXIT` | Bash | `true` | Remove temp files on exit. |
 | `OSM_VALIDATE_DOWNLOADS` | Bash | `true` | Size-check downloaded files. |
-| `OSM_HEALTH_CHECK_PORT` | Unused | `8080` | Not read anywhere; `rbt health` (the Docker `HEALTHCHECK`) takes no port argument. |
+| `OSM_MIN_PBF_SIZE_MB` | Bash | `50000` | Minimum acceptable PBF size in MB for `OSM_VALIDATE_DOWNLOADS`'s sanity check. Planet-sized floor by default so a truncated planet download is caught; lower it (e.g. `10`) when importing a small regional extract. |
+| `OSM_HEALTH_CHECK_PORT` | Unused | `8080` | Referenced only in a no-op log message in `import-osm-data.sh` (`start_health_check_server`); not functionally used. `rbt health` (the Docker `HEALTHCHECK`) takes no port argument. |
 
 ### Shared script settings
 
@@ -108,8 +114,36 @@ These five are resolved independently by both sides using identical rules (`Sett
 |---|---|---|---|
 | `DISK_SPACE_REQUIRED_GB` | Python | `100` | `rbt validate` pre-flight check minimum. |
 | `MEMORY_REQUIRED_GB` | Python | `16` | `rbt validate` pre-flight check minimum. |
-| `HEALTH_CHECK_PORT` | Unused | `8080` | Not read anywhere; `rbt health` takes no port argument. |
+| `HEALTH_CHECK_PORT` | Unused | `8080` | Referenced only in a no-op log message in `import-osm-data.sh` (as a fallback for `OSM_HEALTH_CHECK_PORT`); not functionally used. `rbt health` takes no port argument. |
 | `HEALTH_CHECK_INTERVAL` | Unused | `30` | Not read anywhere; the Docker `HEALTHCHECK interval` is set in `Dockerfile.production` instead. |
+
+## Layer registry validation
+
+[`config/layers.yml`](https://github.com/MJJ203/rbt-data-generator/blob/main/config/layers.yml) is strictly validated when `load_registry()` parses it
+(`src/rbt/layers.py`), not just loosely typed — malformed registries fail
+fast with a `LayerRegistryError` instead of surfacing as confusing runtime
+errors deep in tile generation. Checks include:
+
+- **Missing required fields** — every layer needs `source_table`; every
+  projection needs `epsg`; every `gdal_mvt` source table needs `target`,
+  `minzoom`, and `maxzoom`.
+- **Unknown projection codes** — a layer's `projections:` list must only
+  reference codes declared under the top-level `projections:` section.
+- **Dangling category references** — every layer key listed under
+  `categories.<type>.<category>` must exist under that layer type.
+- **Malformed `gdal_mvt` groups** — each entry under
+  `gdal_mvt.datasets.<type>.groups.<category>.<table>` is validated the same
+  way as a schema field, so a typo'd `minzoom` fails immediately.
+
+See the schema comment at the top of `config/layers.yml` (`:1-29`) for the
+full per-layer field reference. Example error for a layer referencing an
+undeclared projection:
+
+```
+rbt.layers.LayerRegistryError: layer 'building' (cultural): references
+unknown projection(s) ['9999'] — declare them under the 'projections'
+section first
+```
 
 ## Backward compatibility
 

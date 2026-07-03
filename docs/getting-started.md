@@ -65,7 +65,7 @@ export OSM_CONNECTION="postgis://rbt_user:rbt_password@localhost/rbt?prefix=NONE
 mkdir -p output/osm/data output/osm/cache output/osm/diff
 ```
 
-If you plan to use the Docker Compose services, also copy `env.example` to `.env` so the containers pick up the same credentials. See the [Configuration Reference](configuration.md) for every available key.
+If you plan to use the Docker Compose services, also copy `env.example` to `.env` — but edit `PG_USR`/`PG_PASS` first: `env.example` ships placeholder values (`postgres` / `your_password_here`), while `docker-compose.yml` otherwise defaults both to `rbt_user`/`rbt_password` when unset. Set `.env` to match the credentials you exported above so the containers and the CLI agree. See the [Configuration Reference](configuration.md) for every available key.
 
 ## Step 2 — Start PostgreSQL
 
@@ -119,8 +119,8 @@ wget -O "$OSM_DATA_DIR/planet.osm.pbf" \
 
 The importer looks for the file under that exact name — `$OSM_DATA_DIR/planet.osm.pbf` — regardless of whether it is a planet file or an extract.
 
-!!! note "Minimum size check"
-    The import stage sanity-checks `planet.osm.pbf` against a minimum size of `OSM_MIN_PBF_SIZE_MB` (default 10 MB), so country-sized extracts pass without any configuration. For very small extracts (e.g. Liechtenstein, ~3 MB) lower the threshold, or raise it (e.g. `50000`) to catch truncated planet downloads — set `OSM_MIN_PBF_SIZE_MB` in `config/rbt.conf` or the environment.
+!!! warning "Minimum size check"
+    The import stage sanity-checks `planet.osm.pbf` against a minimum size of `OSM_MIN_PBF_SIZE_MB`, which defaults to `50000` (a planet-sized floor, meant to catch truncated planet downloads) — **any regional extract will fail this check unless you lower it first**. For a country-sized extract, set `OSM_MIN_PBF_SIZE_MB=10` (or smaller for tiny extracts like Liechtenstein, ~3 MB) in `config/rbt.conf` or the environment before importing.
 
 ## Step 5 — Create the database
 

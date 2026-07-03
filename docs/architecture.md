@@ -233,6 +233,14 @@ graph LR
     layer with per-table zoom windows. The output is a tile *directory*, not
     an MBTiles file, and tile-join/BTIS do not apply.
 
+!!! warning "`--mode bash` rejects `--force` and `--layer`"
+    The deprecated bash generator (`rbt tiles --mode bash`) has no equivalent
+    for the native engine's `--force` (re-export cached FlatGeoBuf) or
+    `--layer` (single-layer-by-key) flags. Rather than silently drop them,
+    `rbt tiles` fails loudly with a `BadParameter` error if either is passed
+    alongside `--mode bash` (`src/rbt/commands/tiles.py:153-165`) — use the
+    native engine (the default) if you need those flags.
+
 ### Layer Processing Strategy
 
 **Physical Layers**:
@@ -259,7 +267,8 @@ config/
 ├── rbt.conf              # Runtime settings (database, processing, tile generation)
 ├── layers.yml            # Declarative layer registry: layers, schema SQL units,
 │                         #   and the gdal_mvt (EPSG:4326) dataset definitions
-├── postgresql.conf       # PostgreSQL server tuning (mounted into the postgres container)
+├── postgresql.conf       # PostgreSQL server tuning (mounted into the postgres
+│                         #   container and loaded via a `command: -c config_file=...` override)
 ├── tile-server.json      # TileServer-GL data sources
 └── prometheus.yml        # Prometheus scrape configuration
 ```

@@ -36,6 +36,22 @@ are native Python; the four data importers remain Bash leaf scripts under
    PL/pgSQL files under `setup/data-sources/schemas/` through `psql` to build
    the `rbt.*` views consumed by tile generation.
 
+!!! warning "`rbt setup --all` blocks on the OSM step by default"
+    The OSM step passes `--all` to `import-osm-data.sh` unless overridden,
+    and that leaf-script stage ends by running `imposm run` — which blocks
+    indefinitely for continuous updates. **This means `rbt setup --all`
+    never reaches the reference/geonames/buildings/schema steps** unless you
+    override the OSM stage flag:
+
+    ```bash
+    rbt setup --all --osm-arg=--import
+    ```
+
+    `--osm-arg` is repeatable and passed through verbatim to the leaf script
+    (use the `=` form: `--osm-arg=--import`); `--import` runs the one-time
+    planet import and returns, without starting continuous replication. Start
+    continuous updates separately afterward with `rbt osm run`.
+
 The importer scripts are designed for CI/CD pipelines and containerized
 environments, featuring:
 
@@ -70,8 +86,9 @@ flowchart TD
 === "rbt CLI"
 
     ```bash
-    # Complete initialization (recommended)
-    rbt setup --all
+    # Complete initialization (recommended) — see the warning above about
+    # overriding the OSM stage so this doesn't block on continuous updates
+    rbt setup --all --osm-arg=--import
 
     # Run individual steps
     rbt setup --setup-database          # bootstrap only
@@ -206,7 +223,7 @@ Spatial database extensions providing:
 | **fieldmap** | Administrative boundaries | adm0, adm1, adm2, adm0_lines, adm1_lines, adm2_lines, adm0_labels, adm1_labels, adm2_labels, usa |
 | **naturalearth** | Natural Earth features | ne_10m_admin_0_countries, ne_10m_populated_places, ne_10m_rivers_lake_centerlines, etc. |
 | **ourairports** | Aviation data | airport, runway |
-| **rbt** | Core spatial data + tile views | osm_ocean, osm_ocean_simplified, osm_antarctica_icesheet, plus the views created by `rbt schema run` |
+| **rbt** | Core spatial data + tile views | osm_ocean, osm_ocean_simplified, osm_antarctica_icesheet, coastline, plus the views created by `rbt schema run` |
 | **mirta** | Military installations | us_military_installations |
 | **geonames** | Geographic names | administrative_regions, hydrographic, hypsographic, populated_places, etc. |
 | **overture** | Building footprints | building, buildingpart |
@@ -270,7 +287,7 @@ USING GIST (geometry);
 | FieldMaps | FieldMaps.io | GeoPackage | Regular |
 | Natural Earth | Natural Earth Data | GeoPackage | Version releases |
 | OurAirports | OurAirports Community | CSV | Daily |
-| OSM Ocean/Antarctica | OpenStreetMap | Shapefile | Periodic |
+| OSM Ocean/Antarctica/Coastline | OpenStreetMap | Shapefile | Periodic |
 | MIRTA | US DoD | File Geodatabase | Annual |
 | GeoNames | NGA | CSV/TXT | Regular |
 | Overture Buildings | Overture Maps | Parquet | Monthly |
@@ -313,10 +330,10 @@ rbt validate
 
 ```bash
 # Run complete database initialization (recommended)
-rbt setup --all
+rbt setup --all --osm-arg=--import
 
-# Or run individual importers separately
-rbt import osm
+# Or run individual importers separately (rbt import osm needs a stage flag)
+rbt import osm -- --all
 rbt import reference
 rbt import geonames
 rbt import buildings
@@ -343,7 +360,9 @@ SCRIPT_MAX_PARALLEL_JOBS=8 rbt import reference
 Schema units are registered in the `schemas:` block of `config/layers.yml`
 and executed by `rbt schema run` via `psql -v ON_ERROR_STOP=1` (a failing
 statement aborts that unit — stricter than the old bash wrappers, which
-continued past errors).
+continued past errors). A bare `rbt schema run` with no keys, `--type`, or
+`--all` is rejected — running every schema is a maximal, mutating action and
+must be requested explicitly.
 
 ```bash
 # Discover the registered units
@@ -363,10 +382,10 @@ rbt schema run highway --dry-run
 
 | Key | Type | SQL file |
 |---|---|---|
-| `physical` | physical | `setup/data-sources/schemas/physical/physical-core.sql` |
-| `landcover` | physical | `setup/data-sources/schemas/physical/landcover.sql` |
+| `physical` | physical | `setup/data-sources/schemas/physical/physical-core.sql` (built-up areas, glaciers, mountain labels, parks) |
+| `landcover` | physical | `setup/data-sources/schemas/physical/landcover.sql` (landcover polygons + labels) |
 | `water` | physical | `setup/data-sources/schemas/physical/water-features.sql` |
-| `contour` | physical | `setup/data-sources/schemas/physical/terrain.sql` |
+| `contour` | physical | `setup/data-sources/schemas/physical/terrain.sql` (contour + glacier-contour zoom views) |
 | `cultural` | cultural | `setup/data-sources/schemas/cultural/cultural-core.sql` |
 | `highway` | cultural | `setup/data-sources/schemas/cultural/transportation.sql` |
 | `railway` | cultural | `setup/data-sources/schemas/cultural/transportation-railway.sql` |

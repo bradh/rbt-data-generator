@@ -19,14 +19,14 @@ geonames overture`; imposm3 manages `import`/`public` itself):
 
 | Schema | Loaded by | Contents |
 |---|---|---|
-| `import` / `public` | `rbt import osm` (imposm3) | Thematic OSM tables: `water`, `waterway`, `water_label`, `highway`, `railway`, `landcover`, `builtup_area`, `park_polygon`, `places`, `aeroway_*`, `aerodrome_*`, `transportation_*`, `shipway_linestring`, `utility_stations`, `utility_stations_label`, `utility_linestrings`. imposm3 stages into `import` and deploys to `public`; most views read `import`, a few (`sports_ground`, `golf_course`) read the deployed `public` copies. |
+| `import` / `public` | `rbt import osm` (imposm3) | Thematic OSM tables: `water`, `waterway`, `water_label`, `highway`, `railway`, `landcover`, `builtup_area`, `park_polygon`, `city_point`, `aeroway_*`, `aerodrome_*`, `transportation_*`, `shipway_linestring`, `utility_stations`, `utility_stations_label`, `utility_linestrings`. imposm3 stages into `import` and deploys to `public`; most views read `import`, a few (`sports_ground`, `golf_course`) read the deployed `public` copies. Note: `cultural-core.sql`'s `populated_places*` views query a nonexistent `import.places` table instead of `city_point` — see the warning in the "Boundaries & places" section below. |
 | `fieldmap` | `rbt import reference` | Administrative boundaries: `adm0`/`adm1`/`adm2` polygons plus `*_lines`/`*_labels`, and the `usa` country mask used for highway enrichment. |
 | `naturalearth` | `rbt import reference` | Natural Earth 1:10m reference layers (`ne_10m_urban_areas`, `ne_10m_admin_0_countries`, `ne_10m_glaciated_areas`, `ne_10m_antarctic_ice_shelves_polys`, `ne_10m_geography_marine_polys`, `ne_10m_geography_regions_polys`, …). |
 | `ourairports` | `rbt import reference` | `airport` and `runway` CSV imports (plus derived `airports_runways*` materialized views built by the schema scripts). |
 | `geonames` | `rbt import geonames` | NGA GNS name layers: `hydrographic`, `administrative_regions`, and friends. |
 | `mirta` | `rbt import reference` | `us_military_installations` (US DoD MIRTA geodatabase). |
 | `overture` | `rbt import buildings` | `building` and `buildingpart` footprints from Overture Maps GeoParquet. |
-| `rbt` (base tables) | `rbt import reference` + external loads | Pre-loaded inputs the schema scripts expect: `osm_ocean`, `osm_ocean_simplified`, `osm_antarctica_icesheet` (osmdata.openstreetmap.de), plus externally produced `contour`, `contour_glacier` (elevation contours) and the `sound_ocean` helper table. |
+| `rbt` (base tables) | `rbt import reference` + external loads | Pre-loaded inputs the schema scripts expect: `osm_ocean`, `osm_ocean_simplified`, `osm_antarctica_icesheet`, `coastline` (osmdata.openstreetmap.de), plus externally produced `contour`, `contour_glacier` (elevation contours) and the `sound_ocean` helper table. |
 | `utility` | external OSM load | `power_multipolygon` and `man_made_multipolygon` helper tables consumed by `utility.station`. |
 
 ```mermaid
@@ -188,6 +188,18 @@ flowchart LR
 Defined in `cultural/cultural-core.sql`. Country labels enrich FieldMaps geometry with GNS and
 Natural Earth name attributes; lower admin levels pass FieldMaps through directly.
 
+!!! warning "`populated_places*` reference a table imposm3 does not create"
+    The `rbt.populated_places`/`_z3`/`_z7`/`_z9` views (`CREATE VIEW ... FROM
+    import.places`) query columns `ne_id`/`class`/`rank`/`population`/`capital`
+    on an `import.places` table. `imposm-mapping.yaml` has no `places`
+    mapping — the closest equivalent is `city_point`, whose columns are
+    `osm_id`/`place`/`population`/`capital`/`rank` (no `ne_id`, and the class
+    column is named `place`, not `class`). As written, `rbt schema run
+    cultural` fails to create these views against a database populated by the
+    current mapping. This is a pre-existing inconsistency in the SQL, not a
+    documentation choice — the table below describes the *intended* source
+    once reconciled with `city_point`.
+
 ```mermaid
 flowchart LR
     subgraph fm[fieldmap]
@@ -202,7 +214,7 @@ flowchart LR
         ne_adm0[ne_10m_admin_0_countries]
     end
     subgraph imp["import (OSM)"]
-        imp_places[places]
+        imp_places["places (queried, but not<br/>created by imposm — see warning)"]
     end
     subgraph mil[mirta]
         mirta_mil[us_military_installations]
@@ -223,7 +235,7 @@ flowchart LR
 | `rbt.adm0_lines` | `fieldmap.adm0_lines` | International boundary lines | z0–13 |
 | `rbt.adm1_labels` / `adm1_lines` | `fieldmap.adm1` / `adm1_lines` | State/province labels (point-on-surface) and lines | z3–13 |
 | `rbt.adm2_labels` / `adm2_lines` | `fieldmap.adm2_labels` / `adm2_lines` | County/district labels and lines | z6–13 |
-| `rbt.populated_places` (+ `_z3/_z7/_z9`) | `import.places` | City/town/village/hamlet points, rank-filtered per zoom (rank < 8 / 11 / 12 / all) | z3–13 (zoom family) |
+| `rbt.populated_places` (+ `_z3/_z7/_z9`) | `import.places` (see warning above — should be `import.city_point`) | City/town/village/hamlet points, rank-filtered per zoom (rank < 8 / 11 / 12 / all) | z3–13 (zoom family) |
 | `rbt.us_military_installations` (+ `_labels`) | `mirta.us_military_installations` | US military installation polygons and label points | z6–13 |
 
 ## Transportation

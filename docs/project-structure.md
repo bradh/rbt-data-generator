@@ -20,8 +20,15 @@ rbt-data-generator/
 │   └── prometheus.yml           # Prometheus scrape config for the `monitoring` profile
 ├── src/rbt/                     # The `rbt` CLI — the ONLY orchestrator
 │   ├── cli.py                   # Thin Typer app assembler: global options + mounts commands/
-│   ├── commands/                # One module per command group (tiles, osm, setup, import, layers, schema, checks)
-│   │   └── tiles.py             # `rbt tiles` — TileRequest normalization shared by native + `--mode bash`
+│   ├── commands/                # One module per command group (thin Typer wiring; logic lives elsewhere)
+│   │   ├── tiles.py             # `rbt tiles` — TileRequest normalization shared by native + `--mode bash`
+│   │   ├── setup.py             # `rbt setup` — bootstrap + import + schema orchestration
+│   │   ├── importers.py         # `rbt import osm|reference|geonames|buildings`
+│   │   ├── osm.py               # `rbt osm run|status|stop` (alias of `rbt import osm` for run/status/stop)
+│   │   ├── schema.py            # `rbt schema run|list`
+│   │   ├── layers.py            # `rbt layers list|show`
+│   │   ├── checks.py            # `rbt validate|health|smoke`
+│   │   └── _common.py           # Shared Typer option/enum plumbing
 │   ├── config.py                # Frozen Settings dataclass + load_settings()
 │   ├── layers.py                # layers.yml loader → Layer / LayerRegistry / MvtConfig (+ LayerRegistryError)
 │   ├── paths.py                 # project_root() discovery (RBT_PROJECT_ROOT, then walk up)
@@ -32,7 +39,10 @@ rbt-data-generator/
 │   ├── schema.py                # Dispatches schema SQL via psql -v ON_ERROR_STOP=1
 │   ├── checks.py                # rbt validate / smoke / health (native Python)
 │   ├── importers/                # Thin wrappers over the bash leaf importers
-│   │   └── osm.py               # `rbt osm run|status|stop` — supervises `imposm run`
+│   │   ├── osm.py               # `rbt osm run|status|stop` — supervises `imposm run`
+│   │   ├── reference.py         # `rbt import reference` — FieldMaps/Natural Earth/OurAirports/MIRTA
+│   │   ├── geonames.py          # `rbt import geonames` — NGA GNS + USGS GNIS
+│   │   └── buildings.py         # `rbt import buildings` — Overture Maps buildings (S3 + ogr2ogr)
 │   └── tiles/                   # Tile generation engine
 │       ├── engine.py            # TileEngine — picks the backend per projection
 │       ├── exporter.py          # ogr2ogr → FlatGeoBuf (3857/3395)
@@ -48,11 +58,15 @@ rbt-data-generator/
 │       └── cultural/            # cultural-core, transportation, transportation-railway, infrastructure
 ├── production/                  # DEPRECATED bash tile generators (only reachable via `rbt tiles --mode bash`)
 │   ├── generate-tiles.sh
-│   └── tile-generation/         # per-projection generate-{physical,cultural}-*.sh
+│   └── tile-generation/
+│       ├── physical/            # generate-physical-3857-3395.sh, generate-physical-4326.sh
+│       └── cultural/            # generate-cultural-3857-3395.sh, generate-cultural-4326.sh
 ├── scripts/lib/                 # Shared bash helpers sourced by the leaf scripts
 │   ├── config.sh                # rbt_config_load: DATABASE_* / PG_* / libpq PG* resolution
 │   └── logging.sh               # log_info / log_error helpers
-├── tools/                       # Standalone utilities (Overture DuckDB building export)
+├── tools/                       # Standalone utilities
+│   ├── overture_building_processing.sh  # Wrapper: fetch Overture release → DuckDB export
+│   └── duckdb-building-export.sql       # DuckDB SQL: Overture buildings → FlatGeoBuf
 ├── tests/                       # pytest suite (fake_repo / recorded_run fixtures in conftest.py)
 ├── docs/                        # This MkDocs Material site
 ├── output/                      # Generated artifacts (gitignored): tiles/, logs/, temp/

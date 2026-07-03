@@ -25,7 +25,7 @@ Overture Maps, FieldMaps, OurAirports).
 - **Tested and linted**: pytest, ruff, mypy, shellcheck, sqlfluff, and hadolint
   gate every change in CI
 
-> **Status:** alpha — the CLI surface is stabilizing ahead of a 0.1.0 release.
+> **Status:** alpha (0.1.0 released) — the CLI surface is still stabilizing; expect command flags and configuration keys to change before 1.0.
 
 ## Quick start
 
@@ -67,7 +67,7 @@ for a guided walkthrough using a small regional extract.
 - PostgreSQL 18 with PostGIS 3.6
 - GDAL/OGR 3.13+ with MVT and FlatGeoBuf drivers
 - imposm3 0.14.2+
-- tippecanoe (felt/tippecanoe fork)
+- tippecanoe (felt/tippecanoe fork) 2.79.0+
 - Python 3.13+
 - Hardware: see [Performance & Sizing](https://mjj203.github.io/rbt-data-generator/performance/)
   — a small regional extract runs on a 16 GB laptop; a full planet needs

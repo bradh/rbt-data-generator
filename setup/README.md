@@ -51,8 +51,8 @@ If you need more control or want to run individual components:
 # 0. Bootstrap the database and extensions
 rbt setup --setup-database
 
-# 1. Import OSM data (several hours)
-rbt import osm
+# 1. Import OSM data (several hours) — a stage flag is required
+rbt import osm -- --all
 
 # 2. Import reference datasets (1-2 hours)
 rbt import reference
@@ -75,14 +75,14 @@ rbt schema run highway
 
 | Key | Type | SQL file | Description |
 |---|---|---|---|
-| `physical` | physical | `physical/physical-core.sql` | Core physical views (water, glacier, built-up areas) |
-| `landcover` | physical | `physical/landcover.sql` | Landcover and park views |
+| `physical` | physical | `physical/physical-core.sql` | Core physical views (built-up areas, glaciers, mountain labels, parks) |
+| `landcover` | physical | `physical/landcover.sql` | Landcover polygon and label views |
 | `water` | physical | `physical/water-features.sql` | Water bodies, waterways, and water labels |
-| `contour` | physical | `physical/terrain.sql` | Contours and mountain labels |
-| `cultural` | cultural | `cultural/cultural-core.sql` | Core cultural views (aeroway, buildings, boundaries, places) |
-| `highway` | cultural | `cultural/transportation.sql` | Roads, ferries, and ports |
-| `railway` | cultural | `cultural/transportation-railway.sql` | Railways and stations |
-| `aero` | cultural | `cultural/infrastructure.sql` | Utility and infrastructure views (dams, powerlines, pipelines) |
+| `contour` | physical | `physical/terrain.sql` | Contour and glacier-contour zoom views |
+| `cultural` | cultural | `cultural/cultural-core.sql` | Core cultural views (boundaries, buildings, places, cemeteries, ports, utilities, military) |
+| `highway` | cultural | `cultural/transportation.sql` | Road network views (highway zoom variants) |
+| `railway` | cultural | `cultural/transportation-railway.sql` | Railways, stations, and yard labels |
+| `aero` | cultural | `cultural/infrastructure.sql` | Aviation views (airports, heliports, runways, aeroway surfaces) |
 
 For the lowest-level escape hatch, the SQL files can still be fed to `psql` by hand from their own directory, but `rbt schema run` adds `ON_ERROR_STOP`, per-unit logs under `output/logs/`, and the resolved connection environment.
 
@@ -386,7 +386,7 @@ SCRIPT_DEBUG=true SCRIPT_VERBOSE=true rbt import geonames
 SCRIPT_DEBUG=true SCRIPT_VERBOSE=true rbt import buildings
 
 # Preserve temporary files for inspection
-SCRIPT_CLEAN_TEMP_FILES=false SCRIPT_DEBUG=true rbt import osm
+SCRIPT_CLEAN_TEMP_FILES=false SCRIPT_DEBUG=true rbt import osm -- --all
 
 # Enable parallel processing with debug output
 SCRIPT_PARALLEL_INGESTION=true SCRIPT_DEBUG=true rbt import reference
