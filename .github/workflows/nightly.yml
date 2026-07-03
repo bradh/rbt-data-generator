@@ -146,12 +146,14 @@ jobs:
           tippecanoe-decode --stats "$joined" | grep -q '"water"'
           tippecanoe-decode --stats "$joined" | grep -q '"landcover"'
           tippecanoe-decode --stats "$joined" | grep -q '"waterway"'
-          per_layer=output/tiles/physical/3857/water_3857.mbtiles
-          test -f "$per_layer"
-          crs="$(sqlite3 "$per_layer" "SELECT value FROM metadata WHERE name='crs'")"
+          # BTIS metadata lands on the final artifact only: with tile-join
+          # enabled that is the joined file; per-layer outputs are intermediates.
+          crs="$(sqlite3 "$joined" "SELECT value FROM metadata WHERE name='crs'")"
           test "$crs" = "EPSG:3857"
           btp="$(sqlite3 "$joined" "SELECT value FROM metadata WHERE name='btp_schema_version'")"
           test -n "$btp"
+          per_layer=output/tiles/physical/3857/water_3857.mbtiles
+          test -f "$per_layer"
           counts="$(tippecanoe-decode --stats "$per_layer" | python3 .github/scripts/tilestats.py counts)"
           echo "water tilestats: $counts"
           echo "$counts" | python3 -c 'import json,sys; assert json.load(sys.stdin)["water"] > 0'
@@ -269,6 +271,9 @@ jobs:
       PG_DATABASE: rbt
       PG_USR: rbt_user
       PG_PASS: rbt_password
+      # Absolute path: rbt.conf's relative default breaks the bash wrapper's
+      # logging after its leaf scripts cd into their own directories.
+      SHARED_LOG_DIR: ${{ runner.temp }}/logs
     steps:
       - uses: actions/checkout@v7
       - name: Install runtime dependencies
@@ -437,6 +442,7 @@ jobs:
           name: parity-bridge-outputs
           path: |
             output/logs/
+            ${{ runner.temp }}/logs/
             /tmp/native-*.txt
             /tmp/bash-*.txt
           if-no-files-found: ignore
