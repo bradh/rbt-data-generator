@@ -1020,8 +1020,9 @@ generate_metadata() {
     [[ " ${SELECTED_LAYERS[*]} " =~ " utilities " ]] && categories_json="${categories_json}        \"infrastructure\": [\"dam_curve\", \"dam_surface\", \"dam_label\", \"grain_elevator_srf\", \"grain_elevator\", \"hydrocarbon_field\", \"hydrocarbon_label\", \"powerline\", \"pipeline\", \"utility_point\", \"power_station\", \"power_station_label\", \"pumping_station\", \"pumping_station_label\"],\n"
     
     # Remove trailing comma and newline. Drop the blank line the final \n
-    # leaves behind first, or sed's $-address edits it instead of the comma.
-    categories_json=$(echo -e "$categories_json" | sed -e '/^$/d' -e '$ s/,$//')
+    # leaves behind first; must be a separate sed invocation, or the
+    # $-address still resolves to the blank line instead of the comma.
+    categories_json=$(echo -e "$categories_json" | sed '/^$/d' | sed '$ s/,$//')
     
     # Build tables list
     local tables_list=$(echo "${SELECTED_TABLES[@]}" | tr ',' '\n' | sed 's/^/        "/' | sed 's/$/",/' | sed '$ s/,$//')
