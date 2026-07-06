@@ -275,7 +275,7 @@ DATASETS: tuple[OgrDataset, ...] = (
         schema="mirta",
         table="us_military_installations",
         source=_mirta_source,
-        src_layer="MirtaLocations_A",
+        src_layer="FY24MirtaLocations_A",
         nlt="GEOMETRY",
         overwrite=True,
     ),
