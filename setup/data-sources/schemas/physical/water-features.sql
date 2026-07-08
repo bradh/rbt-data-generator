@@ -546,7 +546,7 @@ DO $$
 DECLARE
     error_msg TEXT;
 BEGIN
-    CREATE MATERIALIZED VIEW rbt.water_surface AS
+    CREATE MATERIALIZED VIEW IF NOT EXISTS rbt.water_surface AS
     WITH water_classified AS (
       SELECT 
         osm_id,
@@ -638,28 +638,28 @@ BEGIN
     END IF;
 
     -- Create water_surface_clean table
-    CREATE TABLE rbt.water_surface_clean AS
+    CREATE TABLE IF NOT EXISTS rbt.water_surface_clean AS
     SELECT subclass, osm_id, 
            (ST_Dump(ST_MakeValid(ST_SimplifyPreserveTopology(geometry, 0.000001),'method=structure'))).geom::geometry(Polygon,4326) as geometry
     FROM rbt.water_surface
     WHERE subclass NOT IN ('bay','harbour','sea','strait');
     
-    CREATE INDEX water_srf_clean_geom_idx ON rbt.water_surface_clean USING gist(geometry);
-    CREATE INDEX water_srf_clean_osmid_idx ON rbt.water_surface_clean USING btree(osm_id);
-    CREATE INDEX water_srf_clean_subclass_idx ON rbt.water_surface_clean USING btree(subclass);
+    CREATE INDEX IF NOT EXISTS water_srf_clean_geom_idx ON rbt.water_surface_clean USING gist(geometry);
+    CREATE INDEX IF NOT EXISTS water_srf_clean_osmid_idx ON rbt.water_surface_clean USING btree(osm_id);
+    CREATE INDEX IF NOT EXISTS water_srf_clean_subclass_idx ON rbt.water_surface_clean USING btree(subclass);
     
     RAISE NOTICE 'rbt.water_surface_clean table created successfully';
 
     -- Create valid_ocean table (only if osm_ocean exists)
     IF ocean_exists THEN
-        CREATE TABLE rbt.valid_ocean AS
+        CREATE TABLE IF NOT EXISTS rbt.valid_ocean AS
         SELECT
             'ocean' as subclass,
             ST_MakeValid((ST_Dump(ST_SimplifyPreserveTopology(geometry, 0.000001))).geom::geometry(Polygon,4326),'method=structure') as geometry
         FROM rbt.osm_ocean
         WHERE geometry IS NOT NULL AND NOT ST_IsEmpty(geometry);
         
-        CREATE INDEX valid_ocean_geom_idx ON rbt.valid_ocean USING gist(geometry);
+        CREATE INDEX IF NOT EXISTS valid_ocean_geom_idx ON rbt.valid_ocean USING gist(geometry);
         
         RAISE NOTICE 'rbt.valid_ocean table created successfully';
     ELSE
@@ -706,7 +706,7 @@ BEGIN
     END IF;
 
     -- Employs efficient LATERAL JOIN to avoid expensive ST_Union operations
-    CREATE MATERIALIZED VIEW rbt.water AS
+    CREATE MATERIALIZED VIEW  IF NOT EXISTS rbt.water AS
     WITH 
     -- Filter out pieces that are within the ocean
 
@@ -776,7 +776,7 @@ BEGIN
         RAISE EXCEPTION 'rbt.water_surface does not exist. Cannot create rbt.water_simplified materialized view.';
     END IF;
 
-    CREATE MATERIALIZED VIEW rbt.water_simplified AS
+    CREATE MATERIALIZED VIEW IF NOT EXISTS rbt.water_simplified AS
 WITH valid_inland_geoms AS (
     SELECT
         subclass,
@@ -872,7 +872,7 @@ DECLARE
     error_msg TEXT;
 BEGIN
     -- Intermittent water materialized views
-    CREATE MATERIALIZED VIEW rbt.inland_water_intermittent AS
+    CREATE MATERIALIZED VIEW  IF NOT EXISTS rbt.inland_water_intermittent AS
     WITH intermittent_water AS (
       SELECT
         osm_id,

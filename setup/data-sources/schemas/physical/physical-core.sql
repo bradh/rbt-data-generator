@@ -402,7 +402,7 @@ BEGIN;
 -- Note: Landcover views (zoom-level and label) are now handled in landcover.sql
 
 -- Builtuparea view (union of builtuparea_ne and builtuparea_osm materialized views)
-CREATE VIEW rbt.builtuparea AS
+CREATE OR REPLACE VIEW rbt.builtuparea AS
 SELECT 
     class,
     subclass,
@@ -418,7 +418,7 @@ SELECT
 FROM rbt.builtuparea_osm;
 
 -- Glacier view (union of glacier_ne and glacier_osm materialized views)
-CREATE VIEW rbt.glacier AS
+CREATE OR REPLACE VIEW rbt.glacier AS
 SELECT 
     source,
     name,
@@ -432,7 +432,7 @@ SELECT
 FROM rbt.glacier_osm;
 
 -- Park view
-CREATE VIEW rbt.park AS
+CREATE OR REPLACE VIEW rbt.park AS
 SELECT
     osm_id,
     NULLIF(access, '') as access,
