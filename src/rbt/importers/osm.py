@@ -320,6 +320,7 @@ def import_planet(settings: Settings, *, dry_run: bool = False) -> None:
         "-write",
         "-diff",
         "-optimize",
+        "-overwritecache",
     ]
     process.run_with_retry(
         cmd,
